@@ -82,6 +82,9 @@ The challenge evaluated models on per-tooth detection metrics (mAP). We build an
 ### RQ4 — Can per-tooth findings be aggregated into a coherent treatment priority?
 *Can a scoring heuristic based on diagnosis severity, detection confidence, and co-occurrence of multiple conditions produce a clinically sensible ranking of treatment urgency at the patient level?*
 
+### RQ5 — To what extent do realistic image degradations such as blur, noise, and motion reduce classification performance, and can augmentation with these degradations improve model robustness?
+
+### RQ6 — To what extent does region-focused preprocessing at different anatomical scales improve classification performance and robustness compared with using the full panoramic image?
 ---
 
 ## Project Structure
