@@ -76,12 +76,6 @@ The challenge evaluated models on per-tooth detection metrics (mAP). We build an
 ### RQ2 — What does each training stage contribute?
 *Which curriculum stage contributes most to final model performance? Does the quadrant-only data (693 images) provide meaningful signal, or is the gain primarily driven by the enumeration-tier data (634 images)?*
 
-### RQ3 — How well does the model generalize across dental conditions?
-*Is detection performance consistent across all four diagnosis classes (Caries, Deep Caries, Periapical Lesion, Impacted), or does the model struggle disproportionately with rarer or visually subtle conditions?*
-
-### RQ4 — Can per-tooth findings be aggregated into a coherent treatment priority?
-*Can a scoring heuristic based on diagnosis severity, detection confidence, and co-occurrence of multiple conditions produce a clinically sensible ranking of treatment urgency at the patient level?*
-
 ### RQ5 — To what extent do realistic image degradations such as blur, noise, and motion reduce classification performance, and can augmentation with these degradations improve model robustness?
 
 ### RQ6 — To what extent does region-focused preprocessing at different anatomical scales improve classification performance and robustness compared with using the full panoramic image?
