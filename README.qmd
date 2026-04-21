@@ -1,17 +1,3 @@
----
-title: "HierarchicalDental-YOLOv8: Curriculum-Trained Dental Diagnosis & Treatment Prioritization"
-author: "Bryce G. et al."
-date: today
-format:
-  html:
-    toc: true
-    toc-depth: 3
-    theme: cosmo
-    code-fold: true
-  pdf:
-    toc: true
----
-
 ## Project Overview
 
 This project builds a hierarchical dental diagnosis system trained on the [DENTEX dataset](https://huggingface.co/datasets/ibrahimhamamci/DENTEX) — a clinically annotated collection of panoramic dental X-rays released as part of the MICCAI 2023 challenge. Rather than replicating the original challenge's approach, we extend it in two meaningful ways: (1) we exploit **all three annotation tiers** of the dataset through curriculum-style training, and (2) we go beyond raw detections to produce a **patient-level treatment priority report** — making the model clinically actionable rather than just academically interesting.
