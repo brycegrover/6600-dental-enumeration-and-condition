@@ -1,0 +1,161 @@
+---
+title: "Curriculum-Trained YOLOv8 for Hierarchical Dental Diagnosis on Panoramic X-rays"
+author: ""
+date: today
+format:
+  pdf:
+    number-sections: false
+    toc: false
+    fontsize: 11pt
+    geometry: margin=1in
+bibliography: references.bib
+---
+
+# Abstract
+
+Panoramic dental X-rays are complex images containing many anatomical structures, so clinical interpretation is typically performed in stages. Dentists first identify the correct quadrant of the mouth, then determine the specific tooth using the FDI numbering system, and finally diagnose any pathology affecting that tooth. Many existing deep-learning approaches simplify this process into a single end-to-end detection task and train only on the fully labeled portion of the available dataset. In this study, we revisit the DENTEX 2023 challenge dataset and propose a three-stage curriculum learning pipeline using YOLOv8m-seg that reflects the clinician’s diagnostic workflow while making use of all hierarchical annotation levels in the dataset. In Stage 1, the model is trained to detect quadrants using 1,398 images. In Stage 2, those learned weights are fine-tuned for tooth enumeration using 1,339 images. In Stage 3, the enumeration model is further adapted to a four-class diagnosis task using 705 fully labeled images with instance-segmentation supervision. The final curriculum model is compared with a single-stage baseline trained on the same fully labeled data with matched hyperparameters.
+
+# Introduction
+
+Dental caries and periapical (dental root) disease remain among the most prevalent chronic conditions in the world, and panoramic radiography is often the first imaging modality clinicians use to observe a patient's full condition [@who2022oral, @schwendicke2020dental]. A single panoramic X-ray contains a full picture of the thirty-two teeth. Any subset of teeth may exhibit pathology and reading such an image is a time-consuming, high-cognitive-load task which is susceptible to varying interpretations across observers [@krois2019deep]. Computer-aided interpretation of dental radiographs is therefore a worthwhile approach with modern computer vision. The object classes are well-defined, the annotation conventions are standardized (the FDI system), and even small automation can translate into reductions in clinician workload and diagnostic inconsistency.
+
+Despite this apparent fit, dental diagnosis on panoramic X-rays is substantially harder than the standard natural-image detection benchmarks on which architectures such as YOLO, Faster R-CNN, and DETR were developed [@redmon2016yolo, @ren2015faster, @carion2020detr]. Panoramic images are grayscale and geometrically distorted by the imaging process. The appearance of any given tooth is strongly dependent on its position in the dental arch, and pathology labels are correlated with that position. At the same time, the publicly available labelled data is of moderate size. The DENTEX 2023 challenge released only 705 fully-labelled training images for the disease-detection task [@hamamci2023dentex]. Training a modern detector from scratch on 705 images is problematic, and even fine-tuning a large pretrained backbone is prone to over-fitting when the target task contains four pathology classes with heavy class imbalance.
+
+A second, underutilised feature of the DENTEX release is that it is not a single labelled dataset but a *hierarchy* of three partially-overlapping ones. In addition to the 705 disease-annotated images, the benchmark releases 693 images annotated only with quadrant boxes and 634 images annotated with quadrant and tooth-position (enumeration) boxes. The original DENTEX challenge [@hamamci2023diffusion] treated the disease-annotated tier as the sole training signal for its final evaluation task and framed the coarser tiers as supplementary data for an optional pre-training phase. We argue that this framing leaves substantial signal on the table. The coarser tiers are not merely more data. They are *a curriculum*. Learning to find a quadrant is strictly easier than learning to enumerate a tooth, which is in turn strictly easier than diagnosing pathology on that tooth. Crucially, each coarser task is a well-defined sub-problem of the next, so weights learned at one stage are directly reusable at the next.
+
+This observation motivates the present work. We develop a three-stage curriculum pipeline for hierarchical dental diagnosis. At each stage the model is a YOLOv8m instance-segmentation network, and the stages differ in the label granularity, the training subset, and the initial weights. Stage 1 trains a four-class quadrant detector on the union of the quadrant-only and disease-annotated tiers (1,398 images). Stage 2 initialises from the stage-1 checkpoint and learns an eight-class tooth-position detector on the union of the enumeration and disease-annotated tiers (1,339 images). Stage 3 initialises from the stage-2 checkpoint and fine-tunes a four-class disease detector on the 705 fully-labelled images with polygon-mask supervision. To isolate the contribution of curriculum training from confounding factors such as augmentation strength and schedule, we also train a single-stage baseline with identical hyperparameters on only the 705 fully-labelled images.
+
+The contributions of this paper are as follows. First, we describe a complete, reproducible preprocessing pipeline that converts the DENTEX dataset, which ships in a mixture of COCO-format JSONs for training and validation and LabelMe-format JSONs with Turkish-language text labels for test, into a YOLO-compatible directory structure with polygon masks, YAML configuration files, and verified class mappings. Second, we specify a curriculum training protocol in which the learning rate, warmup length, and augmentation strength are scheduled across stages to reflect decreasing novelty and increasing risk of over-fitting. Third, we lay out an evaluation protocol that answers three research questions: whether curriculum training outperforms a matched baseline, which stage contributes most to the final performance, and whether performance is uniform across the four diagnosis classes. Fourth, we release the preprocessing scripts, training notebooks, and dataset YAMLs as a self-contained reproducibility bundle.
+
+The remainder of the paper is organised as follows. Section 2 reviews related work in dental radiography deep learning, curriculum learning, and the YOLO family. Section 3 describes the DENTEX dataset in detail, including the three annotation tiers, the test-set language idiosyncrasies, and the class distribution of the final target task. Section 4 presents the preprocessing pipeline. Section 5 presents the model, the curriculum, and the training configuration. Section 6 specifies the evaluation protocol. Sections 7, 8, and 9 (results, discussion, conclusion) will be completed once training finishes.
+
+# Related Work
+
+**Deep learning on dental radiographs.** Early deep-learning applications to dental imaging focused on binary caries classification from intra-oral bitewing radiographs, using convolutional networks trained on a few thousand cropped per-tooth patches [@lee2018caries, @krois2019deep]. These studies established that modest CNNs can approach dentist-level agreement on caries detection when the input is tightly cropped and the task is framed as classification rather than detection. Extension to panoramic radiography, in which the input is an uncropped whole-mouth view, required moving from classification to detection, and a subsequent line of work applied off-the-shelf detectors (Faster R-CNN, YOLOv3, YOLOv5) to tooth enumeration and limited-class pathology detection [@silva2018automatic, @tuzoff2019tooth]. The DENTEX 2023 benchmark [@hamamci2023dentex] consolidated this line of research into a standardised multi-tier challenge and introduced a diffusion-based hierarchical detector, HierarchicalDet [@hamamci2023diffusion], which jointly predicts quadrant, tooth number, and diagnosis. HierarchicalDet treats the three annotation tiers as heterogeneous supervision for a single multi-head model rather than as a curriculum.
+
+**Curriculum learning.** The idea of ordering training examples from easy to hard dates back to @elman1993learning and was formalised for deep networks by @bengio2009curriculum, who showed that on shape-recognition and language-modelling tasks, a curriculum accelerated convergence and improved generalisation. Subsequent work extended the framework in two directions relevant to ours. The first is *task-level* curricula, in which the model is trained on progressively more fine-grained objectives rather than progressively harder examples of the same objective [@pentina2015curriculum, @wang2022curriculum]. The second is *self-paced* variants that learn the ordering adaptively [@kumar2010selfpaced]. Our pipeline is a task-level curriculum. All three stages use overlapping image pools, but the label granularity, and therefore the number of output classes and the positional specificity required of the detector, increases monotonically. This particular application of task-level curricula to medical imaging has precedent in radiology [@jimenez2019curriculum] but, to our knowledge, has not been applied to panoramic dental radiography.
+
+**The YOLO family and instance segmentation.** YOLO [@redmon2016yolo] introduced single-stage anchor-based detection and has gone through several generations of architectural refinement. YOLOv8 [@jocher2023yolov8] replaces the anchor-based head with an anchor-free decoupled head, adopts a C2f backbone, and, relevant to this paper, ships a segmentation variant (`yolov8m-seg`) that predicts a polygon mask in addition to a bounding box. We chose YOLOv8m-seg over alternatives such as Mask R-CNN [@he2017maskrcnn] for three practical reasons. The first is native polygon supervision, since the DENTEX disease tier provides segmentation masks, not just boxes. The second is training speed on modest hardware. The third is first-class support for Apple Silicon via the MPS backend [@ultralytics2023mps], which matters for reproducibility on laptop-class machines. The medium-size variant was chosen as a compromise between representational capacity and training time, because on 705 fully-labelled images the `m` variant is the largest size for which over-fitting can be controlled with standard augmentation alone.
+
+**Hierarchical label structures in detection.** The observation that object categories are naturally hierarchical dates to ImageNet [@russakovsky2015imagenet] and has motivated both loss-level modifications, such as hierarchical softmax [@redmon2017yolo9000], and architectural modifications, such as multi-head detectors with label smoothing across sibling classes [@deng2014large]. Our approach is complementary. Rather than modifying the loss or the head at inference time, we exploit the hierarchy at *training* time by decomposing the target task into strictly easier sub-tasks and training sequentially. This has the side-benefit of producing intermediate checkpoints, namely a quadrant-only detector and a tooth-enumeration detector, that may themselves be clinically useful independently of the final diagnosis head.
+
+# Dataset
+
+The DENTEX dataset was released as part of the MICCAI 2023 Dental Enumeration and Diagnosis Challenge. It consists of panoramic dental X-rays collected from three clinical institutions in Turkey, annotated by practising dentists using the FDI Two-Digit Notation. The dataset is partitioned into three hierarchical training tiers, a single validation split, and a single test split, summarised in Table 1.
+
+| Split                   | Images | Annotation level                         | Format             |
+|-------------------------|--------|------------------------------------------|--------------------|
+| Train (quadrant only)   | 693    | Quadrant (4 classes)                     | COCO JSON          |
+| Train (enumeration)     | 634    | Quadrant + tooth position (8 per quad)   | COCO JSON          |
+| Train (disease)         | 705    | Quadrant + tooth + diagnosis (4 classes) | COCO JSON + masks  |
+| Train (unlabelled)      | 1,571  | None                                     | Images only        |
+| Validation              | 50     | Quadrant + tooth + diagnosis             | COCO JSON          |
+| Test                    | 250    | Quadrant + tooth + diagnosis             | LabelMe JSON (TR)  |
+
+: DENTEX dataset partitions and annotation formats.
+
+**Annotation hierarchy.** The three training tiers are nested. The enumeration tier's annotations include quadrant labels as a proper subset, and the disease tier's annotations include both quadrant and enumeration labels. This nesting is exposed in the disease-tier JSON through three separate category fields. The field `category_id_1` encodes the quadrant (values 0 through 3 mapping to upper-right, upper-left, lower-left, lower-right), `category_id_2` encodes the tooth position within that quadrant (values 0 through 7 from the midline out), and `category_id_3` encodes the diagnosis (0 for Impacted, 1 for Caries, 2 for Periapical Lesion, 3 for Deep Caries). The quadrant-only and enumeration tiers use a plain `category_id` field that encodes, respectively, the quadrant or the tooth position. This schema inconsistency across tiers is minor but demands care during preprocessing, because a single conversion script that assumes one field name across all tiers would silently emit incorrect labels.
+
+**Test-set idiosyncrasies.** The test split is distributed in a format distinct from the training and validation splits. Each of the 250 test images is paired with a LabelMe-format JSON (one file per image) whose `label` strings are written in Turkish and follow the pattern `<code>-<diagnosis_term>-<FDI_tooth_number>`, for example `1-çürük-36` (caries on tooth 36). The diagnosis term is one of `çürük` (caries), `küretaj` (curettage, associated with deep caries), `kanal tedavisi`/`lezyon` (root canal treatment / lesion, associated with periapical pathology), `gömülü` (impacted), `sağlam` (healthy), `çekim` (extraction), or `kırık` (broken). The last three are non-diagnostic in our class taxonomy and must be skipped. This affects 131 of the 1,600 test-set annotations, which are discarded rather than mapped. The FDI tooth number is two digits. The first digit is the quadrant (1 through 4) and the second is the tooth position (1 through 8). The LabelMe format also provides polygon points per annotation, which are used as segmentation supervision at test time for mAP(M) computation.
+
+**Class distribution of the final target task.** The disease-tier training set exhibits substantial class imbalance (Table 2). Caries is by far the most common class, accounting for 62% of the 3,529 annotated objects across 705 images. Periapical Lesion is the rarest, at 4.5%. On the test set the balance is closer, with Caries accounting for roughly half of the 1,469 mapped annotations, but the training imbalance implies that per-class performance is likely to degrade most sharply on Periapical Lesion.
+
+| Class              | Train objects | % of train | Test objects | % of test |
+|--------------------|---------------|------------|--------------|-----------|
+| Impacted           | 604           | 17.1       | 221          | 15.0      |
+| Caries             | 2,189         | 62.0       | 747          | 50.9      |
+| Periapical Lesion  | 158           | 4.5        | 236          | 16.1      |
+| Deep Caries        | 578           | 16.4       | 265          | 18.0      |
+| **Total**          | **3,529**     | **100.0**  | **1,469**    | **100.0** |
+
+: Disease-class object counts in the stage-3 train and test splits (after test-set mapping).
+
+# Preprocessing Pipeline
+
+Because the model is trained with Ultralytics YOLOv8 rather than a framework that natively consumes COCO or LabelMe JSONs, a conversion pipeline was required. The pipeline is implemented as three Python scripts orchestrated by a top-level `preprocessing.py`, and it produces, for each of the three curriculum stages, a self-contained directory tree conforming to the Ultralytics dataset layout. This layout consists of `images/{train,val,test}` paired with `labels/{train,val,test}`, plus a stage-specific YAML configuration file.
+
+**Script 1, training annotation conversion.** The script `scripts/01_convert_training_to_yolo.py` reads each of the three training-tier COCO JSONs and emits one YOLO-format `.txt` label file per image. For each annotation the script extracts the polygon mask and normalises its vertex coordinates to $[0,1]$ using the image dimensions provided in the JSON. It then writes one line per annotation of the form `<class_id> x1 y1 x2 y2 ... xn yn`. The class ID is extracted from the appropriate category field for the stage. For stage 1 it reads `category_id` on the quadrant-only tier or `category_id_1` on the disease tier, for stage 2 it reads `category_id_2`, and for stage 3 it reads `category_id_3`. Stages 1 and 2 concatenate the coarser tier with the disease tier to maximise training signal, and the disease-tier labels are re-mapped to quadrant or enumeration IDs accordingly. Images are copied to the corresponding `images/` directory using hard links where the source and target are on the same filesystem volume and a standard copy otherwise. This reduces the disk footprint of the three-stage layout from roughly 3x the raw image set to 1x plus a small overhead for metadata.
+
+**Script 2, test annotation conversion.** The script `scripts/02_convert_test_to_yolo.py` handles the LabelMe-formatted test set. It iterates over the 250 test JSONs, parses each label string with a regex that captures the three hyphen-separated fields, maps the Turkish diagnosis term to the training class ID via a hard-coded dictionary (`çürük` to 1, `küretaj` to 3, `kanal tedavisi` to 2, `lezyon` to 2, `gömülü` to 0), and skips any annotation whose diagnosis term is not in the mapping. The polygon points are converted to normalised YOLO coordinates in the same way as for the training set. A diagnostic report printed at the end of the script confirms the per-class object counts reported in Table 2 and surfaces any unmapped labels. On the current dataset 131 of 1,600 annotations are skipped for the reasons discussed above.
+
+**Script 3, YAML generation.** The script `scripts/03_generate_yamls.py` writes three YAML configuration files (`stage1_quadrant.yaml`, `stage2_enumeration.yaml`, `stage3_disease.yaml`) into `data/processed/yamls/`. Each YAML specifies an absolute `path` to the stage's root directory, the relative `train`, `val`, and `test` subdirectories (where applicable), the number of classes `nc`, and a `names` dictionary mapping integer class IDs to human-readable labels. Absolute paths are resolved at generation time so that the YAMLs are valid regardless of the user's working directory when invoking the Ultralytics trainer.
+
+**Pre-flight validation.** The orchestrator `preprocessing.py` verifies that all three raw JSONs are present and that the image directories referenced by them exist before invoking any conversion scripts. After each script runs, the orchestrator spot-checks that the number of emitted `.txt` files matches the number of `.png` files in the corresponding `images/` directory, and that at least one image from each stage has a non-empty label file. These checks caught two real issues during development, namely a handful of disease-tier images for which segmentation masks were empty, and an off-by-one error in the FDI tooth position mapping, both of which would have silently corrupted stage 3 if allowed to propagate.
+
+# Methods
+
+## Model
+
+All stages use the `yolov8m-seg` variant of YOLOv8 from Ultralytics, initialised from the publicly-released COCO-pretrained checkpoint for stage 1 and from the previous stage's best checkpoint for stages 2 and 3. YOLOv8m-seg consists of a CSP-based backbone with C2f blocks, a path-aggregation feature-pyramid neck that produces feature maps at strides 8, 16, and 32, and a decoupled detection-plus-segmentation head. The detection sub-head is anchor-free and uses distribution focal loss (DFL) for bounding-box regression. The segmentation sub-head predicts 32 prototype masks at stride 8 and per-instance linear combinations thereof. The model has approximately 27 million parameters and, in our configuration with 640-pixel input, 110 GFLOPs per forward pass. We chose the medium variant rather than the larger `l` or `x` variants because the target stage has only 705 training images, and preliminary runs showed that larger variants diverged or over-fit without strong regularisation.
+
+## Curriculum
+
+The curriculum consists of three sequential training runs. The input resolution is held constant at 640 pixels across all stages, and images are letterboxed to preserve aspect ratio. The stages differ in the dataset, the class count, the initial weights, and the learning-rate schedule.
+
+**Stage 1, quadrant detection.** The stage-1 model is initialised from COCO-pretrained `yolov8m-seg.pt` weights. Training data is the union of the 693 quadrant-only images and the 705 disease-tier images (1,398 total), labelled with four quadrant classes. The purpose of this stage is to teach the model the gross spatial structure of a panoramic X-ray, specifically where the four quadrants lie, their approximate shape, and how their boundaries shift under the radiographic distortion characteristic of this modality. Because the task is coarse and the data volume is largest, we use the highest learning rate in the curriculum (initial 1e-3) and the longest warmup (3 epochs).
+
+**Stage 2, tooth enumeration.** The stage-2 model is initialised from the stage-1 best checkpoint. Training data is the union of the 634 enumeration-tier images and the 705 disease-tier images (1,339 total), labelled with eight tooth-position classes (positions 1 through 8 within a quadrant). The purpose of this stage is to refine the model's spatial resolution from the quadrant level down to the individual tooth. Because the weights now encode useful structure from stage 1, the learning rate is halved (initial 5e-4) and the warmup is shortened to 2 epochs to avoid disturbing the stage-1 representation too aggressively.
+
+**Stage 3, diagnosis detection.** The stage-3 model is initialised from the stage-2 best checkpoint. Training data is the 705 disease-tier images labelled with four diagnosis classes. The task is no longer positional, because the model has learned where teeth are, but rather appearance-based. Given a tooth, does it exhibit impaction, caries, deep caries, or a periapical lesion? The learning rate is further reduced to 3e-4, and copy-paste augmentation (probability 0.1) is added to expand the effective training set for rare classes. Early-stopping patience is increased from 20 to 25 epochs to allow the model to continue refining on a smaller dataset.
+
+## Baseline
+
+To isolate the contribution of the curriculum from confounding factors, we train a single-stage baseline with identical architecture, identical augmentation strength (including the copy-paste probability added at stage 3), identical input resolution, identical batch size, identical optimiser, and identical early-stopping patience. The baseline differs from the curriculum only in that (a) it is initialised from COCO-pretrained weights rather than from a stage-2 checkpoint, and (b) its learning rate is set to 1e-3 (matching what stage 1 uses when starting from COCO weights). Any performance gap between the baseline and the curriculum's stage 3 can therefore be attributed to the curriculum itself rather than to hyperparameter tuning.
+
+## Training configuration
+
+All training runs use the AdamW optimiser with weight decay 5e-4 and a cosine learning-rate schedule that decays the initial learning rate to 1% of its starting value over the run. Batch size is 8 on Apple Silicon (MPS) and 16 on CUDA, and gradient accumulation is not used. The loss function is the standard YOLOv8 composition of a distribution focal loss and CIoU loss on boxes, a binary cross-entropy classification loss, and a binary cross-entropy plus dice-like segmentation loss on masks. Augmentations are HSV jitter (H=0.015, S=0.3 for stage 1 and 0.4 for stages 2 and 3, V=0.3 for stage 1 and 0.4 for stages 2 and 3), horizontal flip (probability 0.5), vertical flip (probability 0.1, included because panoramic X-rays are sometimes acquired mirrored), and full mosaic (probability 1.0 throughout, disabled automatically by the Ultralytics trainer for the last 10 epochs). Copy-paste at probability 0.1 is enabled only for stage 3 and the baseline. Training runs for a maximum of 100 epochs per stage with early stopping if the validation mAP@0.5 fails to improve for the configured patience window.
+
+Table 3 summarises the stage-by-stage configuration.
+
+| Parameter              | Stage 1   | Stage 2   | Stage 3   | Baseline |
+|------------------------|-----------|-----------|-----------|----------|
+| Initial weights        | COCO      | Stage 1   | Stage 2   | COCO     |
+| Training images        | 1,398     | 1,339     | 705       | 705      |
+| Number of classes      | 4         | 8         | 4         | 4        |
+| Epochs (max)           | 100       | 100       | 100       | 100      |
+| Batch size             | 8 / 16    | 8 / 16    | 8 / 16    | 8 / 16   |
+| Input resolution       | 640       | 640       | 640       | 640      |
+| Initial LR             | 1e-3      | 5e-4      | 3e-4      | 1e-3     |
+| LR decay factor        | 0.01      | 0.01      | 0.01      | 0.01     |
+| Warmup epochs          | 3         | 2         | 2         | 3        |
+| Optimiser              | AdamW     | AdamW     | AdamW     | AdamW    |
+| Weight decay           | 5e-4      | 5e-4      | 5e-4      | 5e-4     |
+| Copy-paste probability | 0.0       | 0.0       | 0.1       | 0.1      |
+| Early-stopping patience| 20        | 20        | 25        | 25       |
+
+: Per-stage training configuration.
+
+# Experimental Setup
+
+## Evaluation metrics
+
+We report the standard COCO-style detection metrics, which are mean Average Precision at IoU 0.50 (mAP@0.5) and mean Average Precision averaged over IoU thresholds 0.50 through 0.95 in increments of 0.05 (mAP@0.5:0.95). Metrics are computed separately on boxes (B) and masks (M), and the mask metrics are meaningful because the test set ships with polygon annotations. We report per-class Average Precision in addition to the mean so that the substantial class imbalance at training time (Table 2) can be evaluated class by class. All metrics are computed by the Ultralytics `model.val()` routine on the 250-image test split, using the stage-3 YAML to resolve paths.
+
+## Research questions
+
+The evaluation addresses three research questions aligned with the curriculum design.
+
+**RQ1, does the curriculum outperform a matched single-stage baseline?** We compare the stage-3 curriculum model against the baseline on mAP@0.5 (box and mask), mAP@0.5:0.95 (box and mask), and per-class AP. Because hyperparameters are matched, any gap is attributable to the curriculum itself.
+
+**RQ2, what does each stage contribute?** We evaluate each of the three curriculum checkpoints on the stage-specific validation set (the 50-image common validation split, re-labelled to the stage's class taxonomy) and track how quadrant, enumeration, and diagnosis mAP evolve across the pipeline. This answers whether the coarse tiers contribute meaningful signal or whether gains at stage 3 could be achieved by a shorter curriculum.
+
+**RQ3, is performance uniform across diagnosis classes?** We compare per-class AP on the test set and relate the pattern to the training class distribution. The prior expectation is that Periapical Lesion, being both rare at training time (4.5%) and visually subtle (it is an infection at the root tip, not a surface feature), will lag the other classes.
+
+## Implementation and reproducibility
+
+All training and evaluation is implemented in two Jupyter notebooks, `01_curriculum_training.ipynb` and `02_evaluation.ipynb`, that invoke per-stage Python training scripts via subprocess. Each training script is a thin wrapper around `ultralytics.YOLO.train()` that reads its stage-specific YAML and hyperparameter block. Device selection is automatic (MPS where available, otherwise CUDA, otherwise CPU) so that the same codebase runs unchanged on Apple Silicon laptops and on NVIDIA GPU workstations. Random seeds are set at the start of each run. Checkpoints, metric CSVs, and per-epoch validation images are saved under `models/checkpoints/runs/<stage>/` by the Ultralytics trainer and are not post-processed. This means all claims in the results section (once written) can be traced to a specific `results.csv` file without reconstruction.
+
+# Results
+
+*(To be written once the remaining training stages complete. Planned content: the three evaluation tables aligned with RQ1 through RQ3, covering curriculum vs. baseline on test mAP, per-stage validation mAP across the pipeline, and per-class test AP, together with training-curve figures for box loss, segmentation loss, and mAP@0.5 over epochs for each stage.)*
+
+# Discussion
+
+*(To be written after results. Planned content: interpretation of the curriculum-vs-baseline gap, an account of which stage drove the largest improvement and a hypothesis about why, failure-mode analysis on Periapical Lesion and any other under-performing class, qualitative inspection of cases where the curriculum and baseline diverge, limitations stemming from the 250-image test set and the three-institution source, and discussion of how the intermediate quadrant and enumeration checkpoints could be used independently in downstream clinical workflows.)*
+
+# Conclusion
+
+*(To be written last. Planned content: summary of the curriculum design and the empirical answer to each research question, a statement of the practical takeaway for practitioners applying detection models to hierarchically-labelled medical-imaging datasets, and a short list of extensions such as treatment-priority aggregation at the patient level, robustness evaluation under image degradation, and region-focused preprocessing, that build on the curriculum-trained stage-3 model.)*
+
+# References {.unnumbered}
