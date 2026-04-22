@@ -13,6 +13,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+import shutil
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW = PROJECT_ROOT / "data" / "raw"
@@ -31,10 +32,11 @@ VAL_JSON      = RAW / "validation_triple.json"
 
 
 def force_symlink(target, link_path):
-    """Create a symlink, replacing any existing file/symlink at link_path."""
-    if link_path.is_symlink() or link_path.exists():
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if link_path.exists() or link_path.is_symlink():
         link_path.unlink()
-    link_path.symlink_to(target)
+    shutil.copy2(target, link_path)
 
 
 def coco_seg_to_yolo(segmentation, img_w, img_h):
