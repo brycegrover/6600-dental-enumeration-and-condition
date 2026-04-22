@@ -1,0 +1,10 @@
+path: ../data/processed/stage3_disease
+train: images/train
+val: images/val
+test: images/test_motion
+nc: 4
+names:
+  0: Impacted
+  1: Caries
+  2: Periapical_Lesion
+  3: Deep_Caries
