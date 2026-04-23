@@ -71,10 +71,8 @@ The challenge evaluated models on per-tooth detection metrics (mAP). We build an
 ## Research Questions
 
 ### RQ1 — Does curriculum training improve performance?
-*Does training progressively across the three annotation tiers (quadrant → enumeration → diagnosis) yield better detection accuracy on the fully-labeled test set compared to training on the 705 fully-labeled images alone?*
 
-### RQ2 — What does each training stage contribute?
-*Which curriculum stage contributes most to final model performance? Does the quadrant-only data (693 images) provide meaningful signal, or is the gain primarily driven by the enumeration-tier data (634 images)?*
+### RQ2 — Which curriculum stage contributes most to final model performance?
 
 ### RQ5 — To what extent do realistic image degradations such as blur, noise, and motion reduce classification performance, and can augmentation with these degradations improve model robustness?
 
@@ -138,6 +136,10 @@ Each detected tooth receives a severity score based on:
 - Presence of multiple co-occurring findings on the same tooth
 
 Teeth are ranked per patient and the top findings are surfaced in a structured summary.
+=======
+### RQ3 — To what extent do realistic image degradations such as blur, noise, and motion reduce classification performance, and can augmentation with these degradations improve model robustness?
+
+### RQ4 — To what extent does region-focused preprocessing at different anatomical scales improve classification performance and robustness compared with using the full panoramic image
 
 ---
 
