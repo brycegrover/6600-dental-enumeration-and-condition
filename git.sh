@@ -3,9 +3,8 @@ set -euo pipefail
 
 BRANCH="main"
 REMOTE="origin"
-MAX_FILE_MB=50  # reject any single file over this size
+MAX_FILE_MB=50
 
-# ── Commit message ────────────────────────────────────────────────────────────
 if [ $# -ge 1 ] && [ -n "$1" ]; then
   MSG="$1"
 else
@@ -17,12 +16,11 @@ else
   fi
 fi
 
-# ── Sanity checks ─────────────────────────────────────────────────────────────
 echo "Current directory: $(pwd)"
 echo
 
 if [ ! -d ".git" ]; then
-  echo "Error: not a git repository. Run this from your project root."
+  echo "Error: not a git repository. Run this from the project root."
   exit 1
 fi
 
@@ -32,39 +30,45 @@ if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
 fi
 
 if git diff --name-only --diff-filter=U | grep -q .; then
-  echo "Error: unresolved merge conflicts detected. Resolve them before pushing."
+  echo "Error: unresolved merge conflicts detected."
+  git status --short
   exit 1
 fi
 
 git branch -M "$BRANCH"
 
-# ── Large file check ──────────────────────────────────────────────────────────
-echo "Checking for large files..."
-LARGE_FILES=$(git ls-files --others --exclude-standard -z | \
-  xargs -0 -I{} sh -c \
-  'size=$(du -sm "$1" 2>/dev/null | cut -f1); [ "$size" -gt '"$MAX_FILE_MB"' ] && echo "$1 (${size}MB)"' _ {})
+echo "Checking for large untracked files..."
+LARGE_FILES=$(
+  git ls-files --others --exclude-standard -z |
+  while IFS= read -r -d '' file; do
+    if [ -f "$file" ]; then
+      size_mb=$(du -m "$file" 2>/dev/null | cut -f1)
+      if [ -n "$size_mb" ] && [ "$size_mb" -gt "$MAX_FILE_MB" ]; then
+        echo "$file (${size_mb}MB)"
+      fi
+    fi
+  done
+)
 
 if [ -n "$LARGE_FILES" ]; then
   echo
-  echo "Error: the following untracked files exceed ${MAX_FILE_MB}MB and would be staged:"
+  echo "Error: these untracked files exceed ${MAX_FILE_MB}MB:"
   echo "$LARGE_FILES"
   echo
-  echo "Add them to .gitignore before continuing."
+  echo "Add them to .gitignore or remove them before running this script."
   exit 1
 fi
 
-# ── Status preview ────────────────────────────────────────────────────────────
+echo
 echo "Status before sync:"
 git status --short
 echo
 
-# ── Check if remote has commits (initial push case) ───────────────────────────
 REMOTE_EMPTY=0
 if ! git ls-remote --exit-code "$REMOTE" "refs/heads/$BRANCH" >/dev/null 2>&1; then
   REMOTE_EMPTY=1
 fi
 
-# ── Stash local work before pull (only if remote has history) ────────────────
 STASHED=0
 if [ "$REMOTE_EMPTY" -eq 0 ]; then
   if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
@@ -81,20 +85,23 @@ if [ "$REMOTE_EMPTY" -eq 0 ]; then
 
   if [ "$STASHED" -eq 1 ]; then
     echo "Restoring stashed changes..."
-    git stash pop || {
+    if ! git stash pop; then
       echo
-      echo "Stash pop produced conflicts. Resolve them manually, then run:"
-      echo "  git add . && git rebase --continue"
+      echo "Error: stash pop produced conflicts."
+      echo "Resolve conflicts manually, then run:"
+      echo "  git status"
+      echo "  git add ."
+      echo "  git commit -m \"your message\""
+      echo "  git push"
       exit 1
-    }
+    fi
   fi
 else
-  echo "Remote branch not found — skipping pull (initial push)."
+  echo "Remote branch not found. Skipping pull."
 fi
 
-# ── Stage, commit, push ───────────────────────────────────────────────────────
 echo
-echo "Staging all changes..."
+echo "Staging all non-ignored changes..."
 git add .
 
 echo
@@ -103,7 +110,7 @@ git diff --cached --name-status
 echo
 
 if git diff --cached --quiet; then
-  echo "Nothing to commit — working tree is clean."
+  echo "Nothing to commit."
   exit 0
 fi
 
