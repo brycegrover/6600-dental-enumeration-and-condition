@@ -1,0 +1,12 @@
+
+# Local/generated files
+.DS_Store
+.Rproj.user/
+__pycache__/
+*/__pycache__/
+data/
+raw_DENTEX_data/
+models/runs/
+models/checkpoints/
+*.pt
+results/figures/
