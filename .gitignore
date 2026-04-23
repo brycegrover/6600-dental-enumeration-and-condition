@@ -1,12 +1,26 @@
-
-# Local/generated files
+# macOS
 .DS_Store
+
+# R / RStudio local files
 .Rproj.user/
+*.Rproj
+.Rhistory
+.RData
+.Ruserdata
+
+# Python cache
 __pycache__/
 */__pycache__/
+*.pyc
+
+# Local data
 data/
 raw_DENTEX_data/
-models/runs/
-models/checkpoints/
+
+# Model weights
 *.pt
-results/figures/
+
+# Model artifacts
+*.pt
+models/checkpoints/
+models/runs/
