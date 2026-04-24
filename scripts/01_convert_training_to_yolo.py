@@ -1,12 +1,4 @@
-"""
-01_convert_training_to_yolo.py
--------------------------------
-Converts the DENTEX COCO-format training and validation JSONs into
-YOLO segmentation .txt label files, organized per curriculum stage.
-
-Run from the project root:
-    python scripts/01_convert_training_to_yolo.py
-"""
+ #!/usr/bin/env python3
 
 import json
 import os
@@ -20,17 +12,18 @@ RAW = PROJECT_ROOT / "data" / "raw"
 PROCESSED = PROJECT_ROOT / "data" / "processed"
 
 QUADRANT_IMGS = RAW / "training" / "training_data" / "quadrant" / "xrays"
-ENUM_IMGS     = RAW / "training" / "training_data" / "quadrant_enumeration" / "xrays"
-DISEASE_IMGS  = RAW / "training" / "training_data" / "quadrant-enumeration-disease" / "xrays"
-VAL_IMGS      = RAW / "validation" / "validation_data" / "quadrant_enumeration_disease" / "xrays"
-TEST_IMGS     = RAW / "test" / "disease" / "input"
+ENUM_IMGS = RAW / "training" / "training_data" / "quadrant_enumeration" / "xrays"
+DISEASE_IMGS = RAW / "training" / "training_data" / "quadrant-enumeration-disease" / "xrays"
+VAL_IMGS = RAW / "validation" / "validation_data" / "quadrant_enumeration_disease" / "xrays"
+TEST_IMGS = RAW / "test" / "disease" / "input"
 
 QUADRANT_JSON = RAW / "training" / "training_data" / "quadrant" / "train_quadrant.json"
-ENUM_JSON     = RAW / "training" / "training_data" / "quadrant_enumeration" / "train_quadrant_enumeration.json"
+ENUM_JSON = RAW / "training" / "training_data" / "quadrant_enumeration" / "train_quadrant_enumeration.json"
 DISEASE_JSON  = RAW / "training" / "training_data" / "quadrant-enumeration-disease" / "train_quadrant_enumeration_disease.json"
-VAL_JSON      = RAW / "validation_triple.json"
+VAL_JSON = RAW / "validation_triple.json"
 
-
+# functions to convert the test set LabelMe annotations to YOLO format
+# skipping unknown terms and counting class distribution
 def force_symlink(target, link_path):
     link_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -38,7 +31,7 @@ def force_symlink(target, link_path):
         link_path.unlink()
     shutil.copy2(target, link_path)
 
-
+# function to parse a label string like "quadrant-enumeration-disease-16-çürük" into (class_id, fdi)
 def coco_seg_to_yolo(segmentation, img_w, img_h):
     if not segmentation:
         return None
@@ -51,7 +44,7 @@ def coco_seg_to_yolo(segmentation, img_w, img_h):
         coords.append(f"{y:.6f}")
     return " ".join(coords)
 
-
+# function to build indices for images and annotations from the COCO JSON data
 def build_index(data):
     img_index = {img["id"]: img for img in data["images"]}
     ann_index = defaultdict(list)
@@ -59,7 +52,8 @@ def build_index(data):
         ann_index[ann["image_id"]].append(ann)
     return img_index, ann_index
 
-
+# function to write YOLO label files and symlink images for a given dataset split
+# use the provided label field for class IDs
 def write_yolo_labels(data, label_field, out_label_dir, img_src_dir, out_img_dir,
                       img_prefix=""):
     out_label_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +62,7 @@ def write_yolo_labels(data, label_field, out_label_dir, img_src_dir, out_img_dir
     img_index, ann_index = build_index(data)
     written = 0
 
+    # for each image, gather its annotations, convert to YOLO format, and write label file
     for img_id, img_meta in img_index.items():
         fname = img_meta["file_name"]
         img_w = img_meta["width"]
@@ -81,6 +76,7 @@ def write_yolo_labels(data, label_field, out_label_dir, img_src_dir, out_img_dir
         anns = ann_index.get(img_id, [])
         lines = []
 
+        # for each annotation, get the class ID from the specified label field, convert the segmentation to YOLO format, and add a line to the label file
         for ann in anns:
             class_id = ann.get(label_field)
             if class_id is None:
@@ -92,7 +88,8 @@ def write_yolo_labels(data, label_field, out_label_dir, img_src_dir, out_img_dir
             poly_str = coco_seg_to_yolo(seg, img_w, img_h)
             if poly_str:
                 lines.append(f"{class_id} {poly_str}")
-
+                
+        # wite the label file and symlink the image to the output directory
         with open(label_path, "w") as f:
             f.write("\n".join(lines) + ("\n" if lines else ""))
 
@@ -104,12 +101,12 @@ def write_yolo_labels(data, label_field, out_label_dir, img_src_dir, out_img_dir
 
         written += 1
 
-    print(f"  Wrote {written} label files")
     return written
 
-
+# stage 1 uses the "category_id" field for quadrant labels and "category_id_1" for disease labels
+# We call write_yolo_labels twice with different label_field values and img_prefixes to create separate label files for each tier on the same images
 def build_stage1():
-    print("\n── Stage 1: Quadrant Detection ──────────────────────────────────")
+    print("Stage 1: Quadrant Detection")
     stage = PROCESSED / "stage1_quadrant"
 
     print("  [train] Quadrant tier (693 images)...")
@@ -135,9 +132,9 @@ def build_stage1():
 
     print(f"  Stage 1 complete -> {stage}")
 
-
+# # stage 2 uses "category_id_2" for enumeration and disease labels
 def build_stage2():
-    print("\n── Stage 2: Tooth Enumeration ───────────────────────────────────")
+    print("Stage 2: Tooth Enumeration")
     stage = PROCESSED / "stage2_enumeration"
 
     print("  [train] Enumeration tier (634 images)...")
@@ -163,9 +160,9 @@ def build_stage2():
 
     print(f"  Stage 2 complete -> {stage}")
 
-
+# stage 3 uses "category_id_3" for disease labels only, while also symlinking the test images without labels
 def build_stage3():
-    print("\n── Stage 3: Diagnosis Detection ─────────────────────────────────")
+    print("Stage 3: Diagnosis Detection")
     stage = PROCESSED / "stage3_disease"
 
     print("  [train] Disease tier (705 images)...")
@@ -195,11 +192,11 @@ def build_stage3():
 
     print(f"  Stage 3 complete -> {stage}")
 
-
+# main function to run all stages
 if __name__ == "__main__":
-    print(f"Project root : {PROJECT_ROOT}")
-    print(f"Output root  : {PROCESSED}")
+    print(f"Project root: {PROJECT_ROOT}")
+    print(f"Output root: {PROCESSED}")
     build_stage1()
     build_stage2()
     build_stage3()
-    print("\nDone. Next: run 02_convert_test_to_yolo.py")
+    print("Done. Next: run 02_convert_test_to_yolo.py")

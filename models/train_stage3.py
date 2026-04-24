@@ -1,22 +1,3 @@
-"""
-train_stage3.py — Stage 3: Diagnosis Detection (Curriculum)
-============================================================
-Fine-tunes from the Stage 2 checkpoint to detect dental diagnoses with
-polygon segmentation masks (Caries, Deep Caries, Periapical Lesion, Impacted).
-
-This is the final curriculum stage. Its performance is compared against the
-baseline (train_baseline.py) to answer RQ1.
-
-Training data  : 705 fully-labeled images
-Labels used    : category_id_3 + polygon segmentation masks
-Warm-start     : models/checkpoints/stage2_best.pt
-Output         : models/checkpoints/stage3_best.pt
-
-Usage:
-    python models/train_stage3.py
-    python models/train_stage3.py --epochs 80 --batch 8 --device cuda
-"""
-
 import argparse
 import shutil
 from pathlib import Path
@@ -24,7 +5,7 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+# paths
 PROJECT_ROOT  = Path(__file__).resolve().parent.parent
 YAML          = PROJECT_ROOT / "data" / "processed" / "yamls" / "stage3_disease.yaml"
 CHECKPOINTS   = PROJECT_ROOT / "models" / "checkpoints"
@@ -32,7 +13,7 @@ RUNS_DIR      = CHECKPOINTS / "runs"
 STAGE2_CKPT   = CHECKPOINTS / "stage2_best.pt"
 
 
-# ── Device detection ─────────────────────────────────────────────────────────
+# device detection
 def get_device(override: str | None = None) -> str:
     if override:
         return override
@@ -43,7 +24,7 @@ def get_device(override: str | None = None) -> str:
     return "cpu"
 
 
-# ── Training ─────────────────────────────────────────────────────────────────
+# training
 def train(args: argparse.Namespace) -> None:
     device = get_device(args.device)
 
@@ -58,19 +39,17 @@ def train(args: argparse.Namespace) -> None:
             "Run `python preprocessing.py` first."
         )
 
-    print(f"\n{'='*60}")
-    print(f"  Stage 3 — Diagnosis Detection (Curriculum)")
-    print(f"  Device      : {device}")
-    print(f"  Epochs      : {args.epochs}")
-    print(f"  Batch       : {args.batch}")
-    print(f"  Warm-start  : {STAGE2_CKPT}")
-    print(f"  YAML        : {YAML}")
-    print(f"{'='*60}\n")
+    print("Stage 3 — Diagnosis Detection (Curriculum)")
+    print(f"Device: {device}")
+    print(f"Epochs: {args.epochs}")
+    print(f"Batch: {args.batch}")
+    print(f"Warm-start: {STAGE2_CKPT}")
+    print(f"YAML: {YAML}")
 
     CHECKPOINTS.mkdir(parents=True, exist_ok=True)
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load from Stage 2 checkpoint (warm-start — full curriculum)
+    # warm-start from stage 2
     model = YOLO(str(STAGE2_CKPT))
 
     results = model.train(
@@ -82,16 +61,13 @@ def train(args: argparse.Namespace) -> None:
         project=str(RUNS_DIR),
         name="stage3_curriculum",
         exist_ok=True,
-        # ── Optimizer ──────────────────────────────────────────────────
         optimizer="AdamW",
-        lr0=0.0003,               # lower LR — close to final curriculum stage
+        lr0=0.0003,  # lower LR for final curriculum stage
         lrf=0.01,
         warmup_epochs=2,
-        # ── Regularisation ─────────────────────────────────────────────
         weight_decay=0.0005,
         dropout=0.0,
-        # ── Augmentation ───────────────────────────────────────────────
-        # Slightly stronger augmentation since training set is only 705 images
+        # slightly stronger augmentation for the 705-image set
         augment=True,
         hsv_h=0.015,
         hsv_s=0.4,
@@ -99,10 +75,8 @@ def train(args: argparse.Namespace) -> None:
         flipud=0.1,
         fliplr=0.5,
         mosaic=1.0,
-        copy_paste=0.1,           # copy-paste augmentation for small dataset
-        # ── Early stopping ─────────────────────────────────────────────
+        copy_paste=0.1,  # copy-paste aug for small dataset
         patience=args.patience,
-        # ── Output ─────────────────────────────────────────────────────
         save=True,
         plots=True,
         verbose=True,
@@ -112,17 +86,17 @@ def train(args: argparse.Namespace) -> None:
     best_dst = CHECKPOINTS / "stage3_best.pt"
     if best_src.exists():
         shutil.copy(best_src, best_dst)
-        print(f"\n✓ Stage 3 (curriculum) checkpoint saved → {best_dst}")
+        print(f"Stage 3 (curriculum) checkpoint saved to {best_dst}")
     else:
-        print(f"\n⚠ Could not find best.pt at {best_src}")
+        print(f"Could not find best.pt at {best_src}")
 
-    print(f"  Full run artefacts  → {results.save_dir}")
-    print(f"\nCurriculum training complete!")
-    print(f"Run `python models/train_baseline.py` for the comparison baseline.")
-    print(f"Then open `models/02_evaluation.ipynb` to compare results.\n")
+    print(f"Full run artefacts: {results.save_dir}")
+    print("Curriculum training complete.")
+    print("Run `python models/train_baseline.py` for the comparison baseline.")
+    print("Then open `models/02_evaluation.ipynb` to compare results.")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
+# cli
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Stage 3 — Diagnosis Detection (Curriculum)")
     p.add_argument("--epochs",   type=int,   default=100,  help="Training epochs")

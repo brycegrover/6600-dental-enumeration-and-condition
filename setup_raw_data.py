@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-setup_raw_data.py
------------------
 Reorganizes the raw DENTEX HuggingFace download into the directory structure
 expected by preprocessing.py and the conversion scripts.
 
@@ -63,12 +61,10 @@ def main():
             sys.exit(0)
         shutil.rmtree(dst)
 
-    print(f"Source       : {src}")
-    print(f"Destination  : {dst}")
-    print()
+    print(f"Source: {src}")
+    print(f"Destination: {dst}")
 
-    # ── Mapping: (source relative path) -> (destination relative path) ────
-    # Directories to copy
+    # (src relative path) -> (dst relative path)
     dir_moves = [
         ("training_data/quadrant",                       "training/training_data/quadrant"),
         ("training_data/quadrant_enumeration",           "training/training_data/quadrant_enumeration"),
@@ -78,12 +74,11 @@ def main():
         ("disease",                                      "test/disease"),
     ]
 
-    # Files to copy
     file_moves = [
         ("validation_triple.json", "validation_triple.json"),
     ]
 
-    # ── Copy directories ──────────────────────────────────────────────────
+    # copy directories
     for src_rel, dst_rel in dir_moves:
         s = src / src_rel
         d = dst / dst_rel
@@ -93,7 +88,7 @@ def main():
         print(f"  Copying {src_rel}  ->  {dst_rel}")
         shutil.copytree(s, d)
 
-    # ── Copy files ────────────────────────────────────────────────────────
+    # copy files
     for src_rel, dst_rel in file_moves:
         s = src / src_rel
         d = dst / dst_rel
@@ -104,10 +99,8 @@ def main():
         print(f"  Copying {src_rel}  ->  {dst_rel}")
         shutil.copy2(s, d)
 
-    # ── Verify ────────────────────────────────────────────────────────────
-    print(f"\n{'='*50}")
-    print("VERIFICATION")
-    print(f"{'='*50}")
+    # verify
+    print("Verification:")
 
     expected = [
         dst / "training" / "training_data" / "quadrant" / "train_quadrant.json",
@@ -129,13 +122,11 @@ def main():
             all_ok = False
         print(f"  {'OK' if exists else 'MISSING'}  {p.relative_to(dst)}")
 
-    print(f"\n{'='*50}")
     if all_ok:
-        print("ALL OK — data is ready.")
-        print(f"Next: python preprocessing.py")
+        print("All OK — data is ready.")
+        print("Next: python preprocessing.py")
     else:
-        print("SOME FILES MISSING — check the warnings above.")
-    print(f"{'='*50}")
+        print("Some files missing — check the warnings above.")
 
 
 if __name__ == "__main__":

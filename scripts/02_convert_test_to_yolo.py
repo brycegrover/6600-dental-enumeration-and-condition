@@ -1,25 +1,4 @@
-"""
-02_convert_test_to_yolo.py
----------------------------
-Converts the DENTEX test set labels from LabelMe format (one JSON per image,
-Turkish label strings) into YOLO segmentation .txt files for Stage 3.
-
-Label format: "<code>-<turkish_term>-<FDI_tooth_number>"
-    e.g. "1-çürük-36" -> Caries, tooth 36
-
-Disease class mapping (matches training category_id_3):
-    0 = Impacted     (gömülü)
-    1 = Caries       (çürük)
-    2 = Periapical   (kanal, lezyon)
-    3 = Deep Caries  (küretaj)
-
-Skipped terms: saglam (healthy), çekim (extraction), kırık (broken)
-
-Output: data/processed/stage3_disease/labels/test/<stem>.txt
-
-Run from project root:
-    python scripts/02_convert_test_to_yolo.py
-"""
+ #!/usr/bin/env python3
 
 import json
 from pathlib import Path
@@ -31,23 +10,22 @@ OUT_LABEL_DIR = PROJECT_ROOT / "data" / "processed" / "stage3_disease" / "labels
 
 # Turkish term -> disease class ID
 TURKISH_TO_CLASS = {
-    "\u00e7\u00fcr\u00fck": 1,      # çürük   -> Caries
-    "k\u00fcretaj": 3,              # küretaj -> Deep Caries
-    "kanal": 2,                      # kanal   -> Periapical Lesion
-    "lezyon": 2,                     # lezyon  -> Periapical Lesion
-    "g\u00f6m\u00fcl\u00fc": 0,    # gömülü  -> Impacted
+    "\u00e7\u00fcr\u00fck": 1, # çürük:Caries
+    "k\u00fcretaj": 3, # küretaj:Deep Caries
+    "kanal": 2, # kanal:Periapical Lesion
+    "lezyon": 2, # lezyon:Periapical Lesion
+    "g\u00f6m\u00fcl\u00fc": 0, # gömülü:Impacted
 }
 
 # Terms with no training class equivalent — skipped
 SKIP_TERMS = {
-    "saglam",                        # healthy
-    "\u00e7ekim",                    # çekim   -> extraction
-    "k\u0131r\u0131k",              # kırık   -> broken
+    "saglam", # healthy
+    "\u00e7ekim", # çekim:extraction
+    "k\u0131r\u0131k", # kırık:broken
 }
 
-
+# function to parse a label string like "quadrant-enumeration-disease-16-çürük" into (class_id, fdi)
 def parse_label(label_str):
-    """Parse '<code>-<term>-<FDI>' into (class_id, fdi) or None."""
     parts = label_str.split("-")
     if len(parts) < 3:
         return None
@@ -66,7 +44,7 @@ def parse_label(label_str):
         return None
     return class_id, fdi
 
-
+# function to convert LabelMe polygon points to YOLO format
 def poly_to_yolo(points, img_w, img_h):
     """Convert LabelMe [[x,y],...] to normalized YOLO string."""
     coords = []
@@ -77,7 +55,7 @@ def poly_to_yolo(points, img_w, img_h):
         coords.append(f"{ny:.6f}")
     return " ".join(coords)
 
-
+# function to read each test label JSON, convert its annotations to YOLO format, and write a .txt file
 def convert_test_labels():
     OUT_LABEL_DIR.mkdir(parents=True, exist_ok=True)
     json_files = sorted(TEST_LABEL_DIR.glob("*.json"))
@@ -85,6 +63,7 @@ def convert_test_labels():
 
     total_anns = skipped_anns = written_files = 0
 
+    # for each JSON file, read the annotations, convert to YOLO format, and write to a .txt file
     for json_path in json_files:
         with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
@@ -95,6 +74,7 @@ def convert_test_labels():
             continue
 
         lines = []
+        # for each annotation, parse the label and convert the polygon to YOLO format
         for shape in data.get("shapes", []):
             total_anns += 1
             if shape.get("shape_type") != "polygon":
@@ -112,15 +92,10 @@ def convert_test_labels():
         with open(out_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + ("\n" if lines else ""))
         written_files += 1
-
+    # summary
     kept = total_anns - skipped_anns
-    print(f"\nSummary:")
-    print(f"  Label files written : {written_files}")
-    print(f"  Annotations kept    : {kept} / {total_anns}")
-    print(f"  Annotations skipped : {skipped_anns}")
-    print(f"\nDone -> {OUT_LABEL_DIR}")
 
-
+# function to count class distribution in the converted test labels and print it
 def print_class_distribution():
     if not OUT_LABEL_DIR.exists():
         return
@@ -130,12 +105,12 @@ def print_class_distribution():
         for line in txt.read_text().splitlines():
             if line.strip():
                 counts[int(line.split()[0])] += 1
-    print("\nTest class distribution:")
+    print("Test class distribution:")
     for cid in sorted(counts):
         print(f"  [{cid}] {class_names.get(cid, '?'):<20}: {counts[cid]}")
 
-
+# main function to run the conversion and print the class distribution
 if __name__ == "__main__":
-    print(f"Project root : {PROJECT_ROOT}")
+    print(f"Project root: {PROJECT_ROOT}")
     convert_test_labels()
     print_class_distribution()

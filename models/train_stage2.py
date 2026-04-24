@@ -1,19 +1,3 @@
-"""
-train_stage2.py — Stage 2: Tooth Enumeration
-=============================================
-Fine-tunes from the Stage 1 checkpoint to predict individual tooth positions
-within each quadrant (8 classes: tooth positions 1–8).
-
-Training data  : 634 enumeration images + 705 disease images = 1,339 images
-Labels used    : category_id_2 (tooth number 1–8 within quadrant)
-Warm-start     : models/checkpoints/stage1_best.pt
-Output         : models/checkpoints/stage2_best.pt
-
-Usage:
-    python models/train_stage2.py
-    python models/train_stage2.py --epochs 80 --batch 16 --device cuda
-"""
-
 import argparse
 import shutil
 from pathlib import Path
@@ -21,13 +5,9 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 
-
-# ── 8.4→8.3 compat shims ─────────────────────────────────────────────────────
-# Our stage-2 checkpoint was produced by ultralytics 8.4.41, which pickled
-# references to loss classes that don't exist in 8.3.40 (BCEDiceLoss,
-# MultiChannelDiceLoss). We inject inert stubs under the expected module path
-# so unpickling succeeds; 8.3.40 rebuilds its own criterion at train time so
-# these stubs are never actually called.
+# BEGIN AI CODE
+# function to install stubs for missing loss classes in older Ultralytics versions
+# Makes loading newer checkpoints without crashing more likely
 def _install_compat_stubs() -> None:
     import ultralytics.utils.loss as _loss_mod
     for stub_name in ("BCEDiceLoss", "MultiChannelDiceLoss"):
@@ -44,21 +24,8 @@ def _install_compat_stubs() -> None:
 _install_compat_stubs()
 
 
-# ── TAL shape-mismatch crash mitigation ──────────────────────────────────────
-# Ultralytics' Task-Aligned Learning assigner occasionally crashes with:
-#   RuntimeError: shape mismatch: value tensor of shape [N] cannot be broadcast
-#   to indexing result of shape [M]
-# at ultralytics/utils/tal.py:143, line:
-#   bbox_scores[mask_gt] = pd_scores[ind[0], :, ind[1]][mask_gt]
-# Root cause: mask_gt arrives here as a float tensor (from mask_in_gts * mask_gt
-# upstream). MPS's float-mask advanced-indexing semantics occasionally produce
-# different element counts on LHS vs RHS. Bool masks don't exhibit this.
-#
-# Two-layer fix:
-#   1. Cast mask_gt to bool before delegating to the original implementation.
-#   2. If any batch still manages to crash inside the assigner, return zero
-#      align_metric / overlaps for that batch → TAL assigns no positives → the
-#      batch contributes ~0 loss → training proceeds instead of dying.
+# function to install a patch for the known-sporadic TAL shape-mismatch crash
+# which is worth auto-resuming on when it happens (especially on MPS, where it's more common and there's no CUDA OOM to trigger auto-resume instead)
 def _install_tal_patches() -> None:
     from ultralytics.utils import tal as _tal_mod
     import torch as _t
@@ -90,17 +57,19 @@ def _install_tal_patches() -> None:
 
 
 _install_tal_patches()
+# ENDA AI CODE
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+
+# paths
 PROJECT_ROOT  = Path(__file__).resolve().parent.parent
-YAML          = PROJECT_ROOT / "data" / "processed" / "yamls" / "stage2_enumeration.yaml"
-CHECKPOINTS   = PROJECT_ROOT / "models" / "checkpoints"
-RUNS_DIR      = CHECKPOINTS / "runs"
-STAGE1_CKPT   = CHECKPOINTS / "stage1_best.pt"
+YAML = PROJECT_ROOT / "data" / "processed" / "yamls" / "stage2_enumeration.yaml"
+CHECKPOINTS = PROJECT_ROOT / "models" / "checkpoints"
+RUNS_DIR = CHECKPOINTS / "runs"
+STAGE1_CKPT = CHECKPOINTS / "stage1_best.pt"
 WARMSTART_CKPT = CHECKPOINTS / "stage2_warmstart.pt"
 
 
-# ── Device detection ─────────────────────────────────────────────────────────
+# device detection for mps and cuda, with override option
 def get_device(override: str | None = None) -> str:
     if override:
         return override
@@ -111,13 +80,13 @@ def get_device(override: str | None = None) -> str:
     return "cpu"
 
 
-# ── Training ─────────────────────────────────────────────────────────────────
-RUN_NAME   = "stage2"
+# training
+RUN_NAME = "stage2"
 LAST_CKPT  = RUNS_DIR / RUN_NAME / "weights" / "last.pt"
 
-
+# build the kwargs for YOLO.train() in a separate function
+# we can modify them for auto-resume without repeating all the args parsing and printing logic
 def _build_train_kwargs(args: argparse.Namespace, device: str) -> dict:
-    """Full training kwargs used for a fresh run (ignored when resuming)."""
     return dict(
         data=str(YAML),
         epochs=args.epochs,
@@ -127,15 +96,12 @@ def _build_train_kwargs(args: argparse.Namespace, device: str) -> dict:
         project=str(RUNS_DIR),
         name=RUN_NAME,
         exist_ok=True,
-        # ── Optimizer ──────────────────────────────────────────────────
         optimizer="AdamW",
-        lr0=0.0005,               # lower LR for fine-tuning
+        lr0=0.0005,  # lower LR for fine-tuning
         lrf=0.01,
         warmup_epochs=2,
-        # ── Regularisation ─────────────────────────────────────────────
         weight_decay=0.0005,
         dropout=0.0,
-        # ── Augmentation ───────────────────────────────────────────────
         augment=True,
         hsv_h=0.015,
         hsv_s=0.3,
@@ -143,17 +109,14 @@ def _build_train_kwargs(args: argparse.Namespace, device: str) -> dict:
         flipud=0.1,
         fliplr=0.5,
         mosaic=1.0,
-        # ── Early stopping ─────────────────────────────────────────────
         patience=args.patience,
-        # ── Stability ──────────────────────────────────────────────────
-        amp=not args.no_amp,      # AMP off by default (avoids TAL shape-mismatch crash)
-        # ── Output ─────────────────────────────────────────────────────
+        amp=not args.no_amp,  # AMP off by default (avoids TAL shape-mismatch crash)
         save=True,
         plots=True,
         verbose=True,
     )
 
-
+# BEGIN AI CODE
 def _is_transient_crash(err: BaseException) -> bool:
     """Detect the known-sporadic Ultralytics/PyTorch crashes worth auto-resuming."""
     msg = str(err)
@@ -168,9 +131,8 @@ def _is_transient_crash(err: BaseException) -> bool:
     return isinstance(err, RuntimeError) and any(s in msg for s in signatures)
 
 
-# Batch sizes to cycle through on successive auto-resume retries. Perturbing
-# batch breaks the deterministic dataloader grouping that re-triggers the TAL
-# bug on the exact same iteration. Values chosen to stay well under MPS memory.
+# batch sizes cycled through on auto-resume to break dataloader grouping that
+# re-triggers the TAL bug on the same iteration. Values stay under MPS memory.
 _RETRY_BATCH_CYCLE = [5, 3, 6]
 
 
@@ -185,7 +147,7 @@ def _patch_checkpoint_batch(ckpt_path: Path, new_batch: int) -> None:
         ckpt["train_args"]["batch"] = new_batch
         torch.save(ckpt, str(ckpt_path))
 
-
+# train the model to detect and enumerate teeth, starting from stage 1 weights
 def train(args: argparse.Namespace) -> None:
     device = get_device(args.device)
 
@@ -201,25 +163,19 @@ def train(args: argparse.Namespace) -> None:
     warm_starting = args.warm_start and WARMSTART_CKPT.exists()
 
     if resuming:
-        print(f"\n{'='*60}")
-        print(f"  Stage 2 — Resuming from {LAST_CKPT}")
-        print(f"  Device      : {device}")
-        print(f"{'='*60}\n")
+        print(f"Stage 2 — Resuming from {LAST_CKPT}")
+        print(f"Device: {device}")
         model = YOLO(str(LAST_CKPT))
         train_kwargs: dict = dict(resume=True)
     elif warm_starting:
-        # Weights-only warm-start from stage2_warmstart.pt. Fresh optimizer,
-        # fresh epoch counter, writes to runs/stage2_continued/ to preserve
-        # the original runs/stage2/ history.
-        print(f"\n{'='*60}")
-        print(f"  Stage 2 — Warm-start from {WARMSTART_CKPT}")
-        print(f"  (trained weights preserved, optimizer/epoch reset)")
-        print(f"  Device      : {device}")
-        print(f"  Epochs      : {args.epochs}")
-        print(f"  Batch       : {args.batch}")
-        print(f"  AMP         : {not args.no_amp}")
-        print(f"  Run dir     : runs/stage2_continued")
-        print(f"{'='*60}\n")
+        # weights-only warm-start; fresh optimizer/epoch counter, writes to stage2_continued/
+        print(f"Stage 2 — Warm-start from {WARMSTART_CKPT}")
+        print("(trained weights preserved, optimizer/epoch reset)")
+        print(f"Device: {device}")
+        print(f"Epochs: {args.epochs}")
+        print(f"Batch: {args.batch}")
+        print(f"AMP: {not args.no_amp}")
+        print("Run dir: runs/stage2_continued")
         model = YOLO(str(WARMSTART_CKPT))
         train_kwargs = _build_train_kwargs(args, device)
         train_kwargs["name"] = "stage2_continued"
@@ -229,20 +185,17 @@ def train(args: argparse.Namespace) -> None:
                 f"Stage 1 checkpoint not found: {STAGE1_CKPT}\n"
                 "Run `python models/train_stage1.py` first."
             )
-        print(f"\n{'='*60}")
-        print(f"  Stage 2 — Tooth Enumeration (fresh run)")
-        print(f"  Device      : {device}")
-        print(f"  Epochs      : {args.epochs}")
-        print(f"  Batch       : {args.batch}")
-        print(f"  AMP         : {not args.no_amp}")
-        print(f"  Warm-start  : {STAGE1_CKPT}")
-        print(f"  YAML        : {YAML}")
-        print(f"{'='*60}\n")
+        print("Stage 2 — Tooth Enumeration (fresh run)")
+        print(f"Device: {device}")
+        print(f"Epochs: {args.epochs}")
+        print(f"Batch: {args.batch}")
+        print(f"AMP: {not args.no_amp}")
+        print(f"Warm-start: {STAGE1_CKPT}")
+        print(f"YAML: {YAML}")
         model = YOLO(str(STAGE1_CKPT))
         train_kwargs = _build_train_kwargs(args, device)
 
-    # Auto-resume-on-crash: if training blows up with a known-transient error,
-    # reload last.pt and continue. Caps at --max-retries to avoid infinite loops.
+    # auto-resume-on-crash: reload last.pt on known-transient errors, capped at --max-retries
     attempt = 0
     while True:
         try:
@@ -254,16 +207,14 @@ def train(args: argparse.Namespace) -> None:
             attempt += 1
             if attempt > args.max_retries:
                 print(
-                    f"\n⚠ Crash persisted through {args.max_retries} auto-resume "
-                    f"attempts — giving up.\n  Last error: {err}"
+                    f"Crash persisted through {args.max_retries} auto-resume "
+                    f"attempts — giving up. Last error: {err}"
                 )
                 raise
             if not LAST_CKPT.exists():
-                print(f"\n⚠ No last.pt at {LAST_CKPT} — cannot auto-resume.")
+                print(f"No last.pt at {LAST_CKPT} — cannot auto-resume.")
                 raise
-            # Perturb the batch size before each retry to break the deterministic
-            # dataloader grouping that otherwise triggers the TAL bug on the
-            # same iteration of the same epoch on every re-resume.
+            # perturb batch size to break deterministic dataloader grouping that re-triggers the TAL bug
             new_batch = _RETRY_BATCH_CYCLE[(attempt - 1) % len(_RETRY_BATCH_CYCLE)]
             try:
                 _patch_checkpoint_batch(LAST_CKPT, new_batch)
@@ -271,10 +222,10 @@ def train(args: argparse.Namespace) -> None:
             except Exception as patch_err:  # noqa: BLE001
                 batch_msg = f" (batch patch failed: {patch_err})"
             print(
-                f"\n[auto-resume] Transient crash on attempt {attempt}"
-                f"/{args.max_retries}: {err}\n"
-                f"[auto-resume] Reloading {LAST_CKPT}{batch_msg} and continuing…\n"
+                f"[auto-resume] Transient crash on attempt {attempt}"
+                f"/{args.max_retries}: {err}"
             )
+            print(f"[auto-resume] Reloading {LAST_CKPT}{batch_msg} and continuing...")
             model = YOLO(str(LAST_CKPT))
             train_kwargs = dict(resume=True)
 
@@ -282,18 +233,18 @@ def train(args: argparse.Namespace) -> None:
     best_dst = CHECKPOINTS / "stage2_best.pt"
     if best_src.exists():
         shutil.copy(best_src, best_dst)
-        print(f"\n✓ Stage 2 checkpoint saved → {best_dst}")
+        print(f"Stage 2 checkpoint saved to {best_dst}")
     else:
-        print(f"\n⚠ Could not find best.pt at {best_src}")
+        print(f"Could not find best.pt at {best_src}")
 
-    print(f"  Full run artefacts  → {results.save_dir}")
-    print(f"\nNext: python models/train_stage3.py\n")
+    print(f"Full run artefacts: {results.save_dir}")
+    print("Next: python models/train_stage3.py")
 
-
-# ── CLI ───────────────────────────────────────────────────────────────────────
+# BEGIN AI CODE
+# cli
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Stage 2 — Tooth Enumeration")
-    p.add_argument("--epochs",     type=int, default=100, help="Training epochs")
+    p.add_argument("--epochs", type=int, default=100, help="Training epochs")
     p.add_argument("--batch",      type=int, default=4,   help="Batch size (lowered from 8 for MPS stability)")
     p.add_argument("--imgsz",      type=int, default=640, help="Input image size")
     p.add_argument("--patience",   type=int, default=20,  help="Early stopping patience")
@@ -310,7 +261,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-retries", type=int, default=3,
                    help="Auto-resume attempts on transient crashes (TAL shape mismatch, OOM)")
     return p.parse_args()
-
+# END AI CODE
 
 if __name__ == "__main__":
     train(parse_args())

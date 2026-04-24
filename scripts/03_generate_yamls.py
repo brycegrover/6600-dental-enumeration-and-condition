@@ -1,14 +1,4 @@
-"""
-03_generate_yamls.py
----------------------
-Generates YOLOv8 dataset YAML config files for each curriculum stage.
-
-Output: data/processed/yamls/stage{1,2,3}_*.yaml
-
-Run from project root:
-    python scripts/03_generate_yamls.py
-"""
-
+# !/usr/bin/env python3
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +15,7 @@ def write_yaml(path, content):
 def build_yamls():
     YAML_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ── Stage 1 ──────────────────────────────────────────────────────────────
+    # stage 1
     s1 = PROCESSED / "stage1_quadrant"
     write_yaml(YAML_DIR / "stage1_quadrant.yaml",
 f"""# Stage 1 - Quadrant Detection
@@ -43,7 +33,7 @@ names:
   3: quadrant_4
 """)
 
-    # ── Stage 2 ──────────────────────────────────────────────────────────────
+    # stage 2
     s2 = PROCESSED / "stage2_enumeration"
     write_yaml(YAML_DIR / "stage2_enumeration.yaml",
 f"""# Stage 2 - Tooth Enumeration
@@ -66,7 +56,7 @@ names:
   7: tooth_8
 """)
 
-    # ── Stage 3 ──────────────────────────────────────────────────────────────
+    # stage 3
     s3 = PROCESSED / "stage3_disease"
     write_yaml(YAML_DIR / "stage3_disease.yaml",
 f"""# Stage 3 - Diagnosis Detection + Segmentation
@@ -85,9 +75,9 @@ names:
   3: Deep_Caries
 """)
 
-    print(f"\nAll YAMLs written to {YAML_DIR}")
+    print(f"All YAMLs written to {YAML_DIR}")
 
 
 if __name__ == "__main__":
-    print(f"Project root : {PROJECT_ROOT}")
+    print(f"Project root: {PROJECT_ROOT}")
     build_yamls()

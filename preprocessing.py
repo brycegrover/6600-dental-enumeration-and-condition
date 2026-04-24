@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-preprocessing.py
------------------
 Master preprocessing script for the DENTEX dental X-ray project.
 Runs all three preprocessing stages in order:
 
@@ -48,9 +46,7 @@ def run_step(script_name, description):
 
 
 def verify_output():
-    print("\n" + "=" * 60)
-    print("VERIFICATION")
-    print("=" * 60)
+    print("Verification:")
     checks = []
     for stage, expected_splits in [
         ("stage1_quadrant",    ["train", "val"]),
@@ -74,11 +70,9 @@ def verify_output():
 
 
 def main():
-    print("=" * 60)
     print("DENTEX Preprocessing Pipeline")
-    print("=" * 60)
-    print(f"Project root : {PROJECT_ROOT}")
-    print(f"Output dir   : {PROCESSED}")
+    print(f"Project root: {PROJECT_ROOT}")
+    print(f"Output dir: {PROCESSED}")
 
     # Pre-flight: check raw data exists
     raw = PROJECT_ROOT / "data" / "raw"
@@ -106,24 +100,20 @@ def main():
 
     t0 = time.time()
     for i, (script, desc) in enumerate(STEPS, 1):
-        print(f"\n{'─' * 60}")
         print(f"Step {i}/3: {desc}")
-        print(f"{'─' * 60}")
         ok = run_step(script, desc)
         if not ok:
-            print(f"\nPipeline failed at step {i}. Fix the error and re-run.")
+            print(f"Pipeline failed at step {i}. Fix the error and re-run.")
             sys.exit(1)
 
     elapsed = time.time() - t0
     all_ok = verify_output()
 
-    print(f"\n{'=' * 60}")
     if all_ok:
-        print(f"ALL DONE  ({elapsed:.1f}s)")
+        print(f"All done ({elapsed:.1f}s)")
         print(f"Processed data: {PROCESSED}")
     else:
-        print("DONE WITH WARNINGS — check output above")
-    print("=" * 60)
+        print("Done with warnings — check output above")
 
 
 if __name__ == "__main__":
