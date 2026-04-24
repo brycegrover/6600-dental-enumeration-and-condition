@@ -1,24 +1,3 @@
-"""
-generate_paper_figures.py — EDA and training-curve figures for the paper
-========================================================================
-Produces the figures the paper references but that aren't already saved to
-results/figures/. Reads only existing on-disk artifacts (YOLO label files
-and Ultralytics results.csv) — no training or validation is re-run.
-
-Outputs (saved to results/figures/):
-  - eda_class_distribution.png     — per-class annotation count (Stage 3 train)
-  - eda_bbox_area.png              — normalized bbox area distribution
-  - eda_spatial_heatmap.png        — 2D kernel density of box centers
-  - eda_objects_per_image.png      — histogram of objects per image
-  - training_curves_comparison.png — val mAP@0.5 per epoch for baseline,
-                                      stage2, and stage3_curriculum overlaid
-  - confusion_matrix_comparison.png — side-by-side normalized confusion
-                                       matrices for baseline vs curriculum
-
-Usage:
-    python scripts/generate_paper_figures.py
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
