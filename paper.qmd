@@ -6,8 +6,8 @@ author:
 date: "2026-04-23"
 abstract: |
   Panoramic dental X-rays are one of the most common imaging modalities in clinical dentistry, and automated detection of abnormal teeth could reduce the burden of manual review. The DENTEX 2023 benchmark released a hierarchically annotated collection of 2,032 labeled panoramic X-rays covering quadrant, tooth-enumeration, and disease-diagnosis labels, but most prior work has trained only on the 705 images in the fully labeled tier, discarding roughly two-thirds of the available supervision. Using the full DENTEX 2023 release, we study whether a three-stage curriculum that moves from quadrant localization, to tooth enumeration, and finally to disease detection improves a YOLOv8m segmentation model relative to a single-stage baseline trained only on the fully labeled tier. On the 250-image DENTEX test set, the curriculum model reaches box and segmentation mAP\@0.5 of 0.394 and 0.386, compared with 0.417 and 0.400 for the baseline. This is a small but consistent gap, and it holds in the same direction across the validation set as well.
-  *[Placeholder for RQs 3 and 4]*
-  Together, these results suggest that on datasets of this scale do not automatically improve fine-grained detection. Class imbalance and the intrinsic difficulty of particular diseases are larger limits than the total number of labeled boxes.
+  We then evaluate two orthogonal interventions on a smaller YOLOv8n detector trained on the same Tier-3 disease pool. The first measures how the model behaves under simulated image degradation. The clean-trained model is fairly stable under blur and motion blur but loses most of its mAP\@0.5 under Gaussian noise (0.360 to 0.078). Training on a clean-plus-degraded mixture closes that gap and lifts performance on every degraded test condition, with the largest gain on noise (0.078 to 0.365). The second compares three input-preprocessing scales on the same detector. Both region-focused settings outperform the full-image input on the test set (Dental ROI 0.405 mAP\@0.5, Quadrants 0.402, Full 0.360), with the dental-region crop best by a small margin.
+  Together, these results suggest that on datasets of this scale, additional weakly-related supervision does not automatically improve fine-grained detection. Class imbalance and the intrinsic difficulty of particular diseases are larger limits than the total number of labeled boxes, and image-quality augmentation and region-focused preprocessing both move the needle further than the curriculum does.
 format:
   pdf:
     documentclass: article
@@ -45,7 +45,7 @@ The DENTEX 2023 benchmark, released as part of the MICCAI 2023 challenge (Hamamc
 
 Two concerns naturally follow. First, whether an easy-to-hard curriculum on DENTEX actually improves disease-level detection compared with a matched single-stage baseline that uses the fully labeled tier alone. If the extra supervision in the first two stages does not carry classification power to the final task, then the additional labeled images are not functioning as a useful prior, and the curriculum is largely overhead. Second, whether the curriculum's contribution is concentrated in a particular stage. If most of the useful representation is learned in the quadrant stage for example, that has different implications for dataset design than if most of it is learned in the enumeration stage.
 
-This paper addresses those concerns directly. We train a three-stage curriculum YOLOv8m segmentation model on the DENTEX 2023 release and compare it, under matched hyperparameters, with a single-stage baseline trained only on the fully labeled tier. We also examine the checkpoints produced at each stage of the curriculum to isolate which stage contributes the most to the final model. A parallel track of the project evaluates how the resulting model behaves under realistic image degradation and across different scales of anatomical input.
+This paper addresses those concerns directly. We train a three-stage curriculum YOLOv8m segmentation model on the DENTEX 2023 release and compare it, under matched hyperparameters, with a single-stage baseline trained only on the fully labeled tier. We also examine the checkpoints produced at each stage of the curriculum to isolate which stage contributes the most to the final model. A parallel track of the project evaluates how the resulting model behaves under realistic image degradation and under region-focused preprocessing of the panoramic image.
 
 The four research questions are as follows.
 
@@ -126,7 +126,7 @@ The number of disease annotations per image is also right-skewed, with a mean of
 
 ## Model
 
-The underlying detector for all runs is YOLOv8m-seg (Jocher et al. 2023), the medium-sized variant of the YOLOv8 family. It produces both bounding boxes and polygon segmentation masks in a single forward pass, which matches the format of the DENTEX test-set annotations. All four runs (Stage 1, Stage 2, Stage 3 Curriculum, and Baseline) use the same architecture and start from the same ImageNet-pretrained weights.
+All runs start from ImageNet-pretrained weights in the YOLOv8 family (Jocher et al. 2023). The curriculum and baseline runs for RQ1 and RQ2 use YOLOv8m-seg, the medium segmentation variant, which produces bounding boxes and polygon masks in one forward pass and matches the DENTEX test-set annotation format. RQ3 and RQ4 use YOLOv8n, the nano detection-only variant, which is sufficient for their internal comparisons and keeps training cost manageable.
 
 ## Curriculum training framework (RQ1 and RQ2)
 
@@ -401,8 +401,6 @@ Based on the robustness experiment, we showed image quality also matters for dis
 Finally, the region-focused preprocessing experiment shows that where the model looks also matters. Both the ROI and quadrant models performed better than the full panoramic image model. This supports the EDA finding that disease annotations are concentrated around the dental arches, while much of the full X-ray contains background. The ROI model gave the best mAP\@0.5, and the quadrant model gave the best mAP\@0.5-0.95, but the two results were very close. Therefore, cropping to the dental region appears useful, while splitting the image into quadrants does not clearly improve beyond the ROI crop.
 
 Overall, the results suggest that simply adding more off-target supervision is not enough for this dataset. More direct changes, such as degradation-based augmentation and region-focused preprocessing, are more useful because they address the actual weaknesses of the disease-detection task.
-
-Region-focused-preprocessing (RQ4) tracks of this project are reported separately by the co-author.
 
 # LLM Usage
 
