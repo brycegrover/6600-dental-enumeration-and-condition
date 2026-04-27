@@ -332,7 +332,45 @@ We see that blur has almost no negative effect, since mAP\@0.5 stays close to th
 
 We see that the augmented model improves performance across all five test conditions. The largest gain appears under noise, where mAP\@0.5 increases from 0.078 to 0.365. This is important because noise was also the condition that hurt the baseline model the most. Mixed degradation also improves clearly, from 0.200 to 0.373. Motion blur improves from 0.339 to 0.374, while clean and blur images only show small gains. Overall, augmented training makes the model more stable when the input X-ray quality becomes worse.
 
-## [Placeholder for RQ4]
+## RQ4. Region-Focused Evaluation
+
+To address the question: To what extent does region-focused preprocessing improve YOLOv8 disease detection performance compared with using the full panoramic image? We found during the EDA, the disease annotations were concentrated around the dental arches instead of being spread across the whole image. Therefore, we tested whether removing unused background with ROI crops, or zooming further into quadrant crops, could help the detector focus on smaller disease regions.
+
+### Cropped Image
+
+Before comparing model scores, we first checked the cropped images visually. This step was important because the ROI and quadrant datasets were newly created from the original Stage 3 images. The goal was to make sure the crops still kept the dental regions and that the transformed YOLO labels still matched the correct tooth areas.
+
+![Original panoramic X-ray](results/figures/original.png){#fig-rq4-original width=85%}
+
+![Dental ROI crop](results/figures/roi.png){#fig-rq4-roi width=85%}
+
+| Upper-left quadrant | Upper-right quadrant |
+|---|---|
+| ![](results/figures/quad_1.png){width=100%} | ![](results/figures/quad_2.png){width=100%} |
+| Lower-left quadrant | Lower-right quadrant |
+| ![](results/figures/quad_3.png){width=100%} | ![](results/figures/quad_4.png){width=100%} |
+
+Figure @fig-rq4-original and Figure @fig-rq4-roi show how the same X-ray changes under the original and ROI input formats. The original image keeps the full panoramic view, including large non-dental background areas. The ROI crop removes much of this outside region while keeping the main upper and lower dental arches. The quadrant crops split the ROI into smaller regions, so each crop gives the model a closer view of one part of the mouth. This visual check confirms that the preprocessing keeps the important dental structures while changing the scale and amount of background seen by the model.
+
+### Region-Focused Model Comparison
+
+After creating the ROI and quadrant datasets, we trained three different YOLOv8 models. First, the model used the original Stage 3 panoramic images and served as the baseline. Second, the ROI model used the dental ROI crops. Lastly, the quadrant model used the four-quadrant crops. All three models were evaluated on their matching test sets.
+
+@tbl-rq4-region-results summarizes the test results for three different models.
+
+| Model | mAP\@0.5 | mAP\@0.5-0.95 | mAP\@0.5 difference from full | mAP\@0.5-0.95 difference from full |
+|---|---:|---:|---:|---:|
+| Full image | 0.360 | 0.232 | 0.000 | 0.000 |
+| Dental ROI | 0.405 | 0.268 | 0.046 | 0.035 |
+| Quadrants | 0.402 | 0.274 | 0.042 | 0.042 |
+
+: Region-focused YOLOv8 test results across full-image, ROI, and quadrant inputs. {#tbl-rq4-region-results}
+
+As we can see from the @tbl-rq4-region-results, the full-image model reached mAP\@0.5 of 0.360 and mAP\@0.5-0.95 of 0.232. The ROI model improved to 0.405 on mAP\@0.5 and 0.268 on mAP\@0.5-0.95. The quadrant model reached 0.402 on mAP\@0.5 and 0.274 on mAP\@0.5-0.95. Compared with the full-image baseline, the ROI model improved mAP\@0.5 by 0.046, while the quadrant model improved it by 0.042.
+
+![Region-Focused YOLOv8 Comparison](results/figures/rq4_comparison.png){#fig-rq4-region-bar width=85%}
+
+Figure @fig-rq4-region-bar shows the same comparison visually for mAP\@0.5. Both region-focused settings perform better than the full-image baseline. The ROI model gives the highest mAP\@0.5, while the quadrant model gives the highest mAP\@0.5-0.95. Overall, these results suggest that region-focused preprocessing improves YOLOv8's ability to detect dental disease. However, the ROI and quadrant models are very similar, so splitting the image into four quadrants does not offer a clear advantage over a single ROI crop.
 
 # Discussion
 
@@ -342,13 +380,17 @@ The per-stage breakdown points to why. Most of the curriculum's training materia
 
 Base on the robustness results, we see a different pattern. The clean-trained YOLOv8 model is fairly stable under blur and motion blur, but it is much more sensitive to Gaussian noise. This suggests that the model relies heavily on local pixel texture when detecting disease regions. When random noise is added, small disease patterns become harder to separate from normal tooth and bone texture. The degradation-augmented model improves this problem, especially under noise and mixed degradation. This supports the idea that simple image-quality augmentation may be more useful than curriculum learning for improving robustness under low-quality intake images.
 
+The region-focused results show that cropping helped disease detection. Both the ROI and quadrant models performed better than the full-image model, which matches the EDA result that annotations were concentrated around the dental arches. The ROI model had the best mAP\@0.5, while the quadrant model had the best mAP\@0.5-0.95, but the two results are very close. This suggests that removing background is useful, but splitting the mouth into four smaller crops does not add a clear advantage over the ROI crop.
+
 # Limitations
+
+There exist a class imbalance in the Stage 3 disease labels. Caries makes up most of the training annotations, while Periapical Lesion is much rarer. Because the Stage 3 set only has about 700 training images, simple balancing methods were hard to use. Undersampling would remove too much data, while oversampling did not fully solve the rare-class problem. We also could not easily increase the training set size because dental X-rays are carefully labeled medical images, and they involve real patient data. Privacy concerns and annotation cost make it hard to collect more comparable data.
 
 We did not repeat training runs, so the strength of the RQ1 conclusion rests on the consistency of direction across the six matched comparisons rather than on a formal statistical test. All runs also share a single backbone and a single family of hyperparameters, so a curriculum that does not help under these settings could still help under different ones.
 
-The degraded images are simulated from clean X-rays rather than collected as real low-quality clinical scans. This means the robustness results show how the model behaves under controlled blur, noise, and motion settings, but they may not capture every problem that appears in real world low-quality clinical scans.
+The degraded images are simulated from clean X-rays rather than collected as real low-quality clinical scans. This means the robustness results show how the model behaves under controlled blur, noise, and motion settings, but they may not capture every problem that appears in real-world low-quality clinical scans.
 
-ADD about data info
+For the region-focused experiment, the ROI and quadrant crop rules were fixed using simple image proportions rather than being learned from each X-ray. This makes the method easy to reproduce, but it may not fit every patient image equally well. A few disease labels were also lost after cropping. For the quadrant setting, many crop label files were empty because each image was split into four parts, and not every quadrant contained a disease annotation. These empty crops are valid negative examples, but they also make the quadrant dataset different from the full-image dataset.
 
 # Conclusion
 
@@ -356,9 +398,15 @@ A three-stage easy-to-hard curriculum trained on the full DENTEX 2023 release di
 
 Based on the robustness experiment, we showed image quality also matters for disease detection. We see the clean-trained YOLOv8 model stayed fairly stable under blur and motion blur, but it dropped sharply under Gaussian noise. Also, after adding degraded images during training, the augmented model improved across all test conditions, especially under noise and mixed degradation. In practice, this means that model performance may depend heavily on the quality of the incoming X-ray. If images are noisy, the detector may miss or misclassify disease regions more often. This makes robustness testing important before using a model in real clinical workflows. These results suggest that degradation-based augmentation is a useful next step when the goal is to make the detector more stable on lower-quality X-rays.
 
+Finally, the region-focused preprocessing experiment shows that where the model looks also matters. Both the ROI and quadrant models performed better than the full panoramic image model. This supports the EDA finding that disease annotations are concentrated around the dental arches, while much of the full X-ray contains background. The ROI model gave the best mAP\@0.5, and the quadrant model gave the best mAP\@0.5-0.95, but the two results were very close. Therefore, cropping to the dental region appears useful, while splitting the image into quadrants does not clearly improve beyond the ROI crop.
 
+Overall, the results suggest that simply adding more off-target supervision is not enough for this dataset. More direct changes, such as degradation-based augmentation and region-focused preprocessing, are more useful because they address the actual weaknesses of the disease-detection task.
 
 Region-focused-preprocessing (RQ4) tracks of this project are reported separately by the co-author.
+
+# LLM Usage
+
+We used ChatGPT-5 as a writing and coding support tool during this project. It was used to help debug Python and Quarto issues, organize files and notebook sections, summarize intermediate results, and improve formatting. All final experiment design decisions, code execution, result interpretation, and report revisions were reviewed and completed by the authors.
 
 # References {.unnumbered}
 
