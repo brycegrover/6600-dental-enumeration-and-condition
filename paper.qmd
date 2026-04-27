@@ -51,7 +51,7 @@ The four research questions are as follows.
 
 1. *RQ1.* Does a three-stage curriculum (quadrant, enumeration, diagnosis) improve DENTEX disease-detection performance over a single-stage baseline trained only on the fully labeled tier?
 2. *RQ2.* Which curriculum stage contributes most to the final model's performance?
-3. *RQ3.* To what extent do realistic image degradations such as blur, noise, and motion reduce detection performance, and can augmentation with these degradations improve robustness?
+3. *RQ3.* How do realistic image degradations affect YOLOv8 disease detection performance, and does training with degraded images improve robustness?
 4. *RQ4.* To what extent does region-focused preprocessing at different anatomical scales improve detection performance relative to using the full panoramic image?
 
 The primary goal of this project is empirical rather than methodological. We do not propose a new architecture or a new curriculum algorithm. Instead, we evaluate how well a standard, widely used detection model responds to an explicit easy-to-hard curriculum when the curriculum is built using data that has already been released alongside the target task.
@@ -142,7 +142,17 @@ All four runs use early stopping on validation mAP and a fixed upper bound on tr
 
 The baseline for RQ1 is a single-stage run matched as closely as possible to Stage 3 so that any performance difference can be attributed to the presence of the curriculum warm-start rather than to hyperparameter drift. The baseline trains on the same 705 Tier-3 images, with the same architecture, optimizer, and augmentation schedule as Stage 3. The two differences are the initialization (ImageNet instead of Stage 2's checkpoint) and a slightly higher initial learning rate, since Stage 3 uses a lower one as the final fine-tuning stage of a warm-started model. Other optimizer choices are identical across the two runs.
 
-## *[Placeholder for methods for RQ3 and 4]*
+## Image Degradation and Robustness Evaluation (RQ3)
+
+To address whether realistic image degradations affect YOLOv8 disease detection performance, we simulated the model under lower-quality X-ray conditions, including blur, noise, motion blur, and mixed degradation. Moreover, to examine whether training with degraded images improves robustness, we trained a second YOLOv8 model using degradation-augmented training data. 
+
+### Baseline Robustness Test
+
+For the baseline robustness test, we trained a YOLOv8 model, where the model was trained on the original clean Stage 3 disease-detection training set. Based on the validation performance, we selecte the best checkpoint from this training run. Then, we evaluated this best baseline model one the five test conditions: clean, blur, noise, motion blur, and mixed degradation. We keep the same labels for the degraded test sets as the clean test set to ensure that any performance change came from image quality degradation rather than changes in the ground-truth labels.
+
+### Robustness Test with Augmented Training
+
+For the augmented robustness test, we trained a second YOLOv8 model, where the model was trained both on the original clean training images and degraded versions of the training images. The degraded training images were created using the same four degradation types: blur, noise, motion blur, and mixed degradation. This allowed the model to learn disease features under both normal and lower-quality image conditions.
 
 ## Evaluation
 
