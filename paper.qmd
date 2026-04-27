@@ -52,7 +52,7 @@ The four research questions are as follows.
 1. *RQ1.* Does a three-stage curriculum (quadrant, enumeration, diagnosis) improve DENTEX disease-detection performance over a single-stage baseline trained only on the fully labeled tier?
 2. *RQ2.* Which curriculum stage contributes most to the final model's performance?
 3. *RQ3.* How do realistic image degradations affect YOLOv8 disease detection performance, and does training with degraded images improve robustness?
-4. *RQ4.* To what extent does region-focused preprocessing at different anatomical scales improve detection performance relative to using the full panoramic image?
+4. *RQ4.* To what extent does region-focused preprocessing improve YOLOv8 disease detection performance compared with using the full panoramic image?
 
 The primary goal of this project is empirical rather than methodological. We do not propose a new architecture or a new curriculum algorithm. Instead, we evaluate how well a standard, widely used detection model responds to an explicit easy-to-hard curriculum when the curriculum is built using data that has already been released alongside the target task.
 
@@ -154,6 +154,30 @@ For the baseline robustness test, we trained a YOLOv8 model, where the model was
 
 For the augmented robustness test, we trained a second YOLOv8 model, where the model was trained both on the original clean training images and degraded versions of the training images. The degraded training images were created using the same four degradation types: blur, noise, motion blur, and mixed degradation. This allowed the model to learn disease features under both normal and lower-quality image conditions.
 
+## Region-Focused Evaluation (RQ4)
+
+The region-focused experiment was motivated by the EDA spatial-structure result. In the Stage 3 training set, annotation centers were not spread evenly across the whole panoramic X-ray. Instead, the center of the image was mostly empty. Since the disease boxes were small compared with the full X-ray, the EDA suggested that the full image may include too much unused background. Therefore, we tested whether ROI and quadrant crops could improve YOLOv8 disease detection.
+
+To address the question: To what extent does region-focused preprocessing improve YOLOv8 disease detection performance compared with using the full panoramic image? We compared three input formats: the original full panoramic image, a dental ROI crop, and quadrant crops. The full-image model was used as the baseline. The ROI and quadrant datasets were created from the same Stage 3 train, validation, and test splits, so the comparison only changed the image preprocessing step.
+
+### Dental ROI Crop
+
+For the ROI setting, we cropped each X-ray's extraneous regions and kept only the main dental region. The crop kept the horizontal range from 0.18 to 0.82 of the image width and the vertical range from 0.25 to 0.85 of the image height. This setting keeps most of the upper and lower dental arches while removing part of the empty outside background. In our notebook check, this reduced an example image from the full size of about 1316 by 2850 pixels to an ROI image of about 789 by 1824 pixels.
+
+Because YOLO labels depend on image coordinates, the labels were transformed after cropping. The original labels were read, converted into pixel coordinates, shifted into the ROI crop coordinate system, clipped to the crop boundary, and normalized again. The cropped ROI images and the transformed labels were then saved as a new YOLO dataset.
+
+### Quadrant Crops
+
+For the quadrant setting, we used the same dental ROI region and split it into four smaller crops: upper-left, upper-right, lower-left, and lower-right. In this way, the model can have a closer view of smaller mouth regions, rather than using the entire panoramic image at once. Each original X-ray, therefore, produced four quadrant images.
+
+The YOLO labels were also transformed for each quadrant crop. The original labels were converted into pixel coordinates, shifted into the quadrant coordinate system, clipped to the crop boundary, and normalized again. Also, the labels were kept only when the box center fell inside that quadrant. Also, we noticed that some of the quadrant labels were empty. We inspected and verified that it is normal, since not all part of the mouth contains a disease annotation; therefore, we kept these empty crops as valid negative examples.
+
+### Model Comparison
+
+After creating the full-image, ROI, and quadrant datasets, we trained a separate YOLOv8 model for each input setting. The full-image model used the original Stage 3 training images, as it serves as the baseline model. The ROI model was trained on the cropped dental-region images, and the quadrant model was trained on the four cropped quadrant images created from each original X-ray.
+
+To keep the comparison fair, we use the same train, validation, and test structure, as well as the sme YOLOv8 training settings. Our control variable is the input preprocessing method, since this allows us to test whether the region-focused method improves disease detection compared with using the full panoramic image.
+
 ## Evaluation
 
 All curriculum and baseline models are evaluated on the held-out DENTEX validation set (50 panoramic X-rays) during training and on the DENTEX test set (250 panoramic X-rays, 1,469 evaluable annotations after filtering) for final reporting. The validation set is used for picking the best checkpoint inside each training run. The test set is used only once, after all hyperparameters and stopping criteria have been fixed, to avoid leaking test-set information into model selection.
@@ -161,6 +185,8 @@ All curriculum and baseline models are evaluated on the held-out DENTEX validati
 Two standard metrics are reported on both sets. Mean average precision at IoU 0.5 (mAP\@0.5) is the headline metric used in the DENTEX challenge and summarizes performance at a single, relatively forgiving overlap threshold. We also report mAP\@0.5-0.95, which averages performance across stricter overlap thresholds (from 0.5 up to 0.95) and is more sensitive to how tightly each prediction is localized. Both metrics are reported for bounding boxes and for segmentation masks. We treat mAP\@0.5 as the primary metric because it is most directly comparable to the DENTEX challenge baselines and is more stable on a small test set. For RQ2, which compares the three curriculum stages against each other, we also report each stage's validation mAP on its own target (quadrants for Stage 1, tooth positions for Stage 2, diseases for Stage 3). These per-stage values are not directly comparable to one another, since they measure different tasks, but the overall profile of how mAP develops across stages is informative about where the curriculum is doing its work.
 
 For RQ3, we use the same test-set logic but evaluate model robustness under different image-quality conditions. The clean-trained YOLOv8 model and the degradation-augmented YOLOv8 model are both evaluated on five Stage 3 disease-detection test sets: clean, blur, noise, motion blur, and mixed degradation. For each condition, we report bounding-box mAP\@0.5 and mAP\@0.5-0.95. For each degraded test set, we compare performance against the clean test set to measure the loss caused by lower image quality. We then compare the augmented model against the clean-trained model to see whether degraded training examples improve robustness.
+
+For RQ4, we evaluate whether region-focused preprocessing changes YOLOv8 disease-detection performance. The full-image, ROI, and quadrant models are evaluated on their matching Stage 3 test sets: full-image test images for the full model, ROI-cropped test images for the ROI model, and quadrant-cropped test images for the quadrant model. The same fixed preprocessing rule is applied to train, validation, and test splits, so the test set is not used to choose the crop. For this comparison, we report bounding-box mAP\@0.5 and mAP\@0.5-0.95. The full-image model is treated as the baseline, and the ROI and quadrant results are compared against it to measure whether removing background or zooming into smaller mouth regions improves detection.
 
 # Results
 
