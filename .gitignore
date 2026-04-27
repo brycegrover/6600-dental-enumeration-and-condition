@@ -28,3 +28,10 @@ methods/runs/
 
 # YOLO training outputs
 *.cache
+
+# Rendered paper output
+paper.pdf
+paper.html
+
+# Generated figures
+results/figures/
