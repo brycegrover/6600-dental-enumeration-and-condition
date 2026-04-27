@@ -186,7 +186,7 @@ Two standard metrics are reported on both sets. Mean average precision at IoU 0.
 
 For RQ3, we use the same test-set logic but evaluate model robustness under different image-quality conditions. The clean-trained YOLOv8 model and the degradation-augmented YOLOv8 model are both evaluated on five Stage 3 disease-detection test sets: clean, blur, noise, motion blur, and mixed degradation. For each condition, we report bounding-box mAP\@0.5 and mAP\@0.5-0.95. For each degraded test set, we compare performance against the clean test set to measure the loss caused by lower image quality. We then compare the augmented model against the clean-trained model to see whether degraded training examples improve robustness.
 
-For RQ4, we evaluate whether region-focused preprocessing changes YOLOv8 disease-detection performance. The full-image, ROI, and quadrant models are evaluated on their matching Stage 3 test sets: full-image test images for the full model, ROI-cropped test images for the ROI model, and quadrant-cropped test images for the quadrant model. The same fixed preprocessing rule is applied to train, validation, and test splits, so the test set is not used to choose the crop. For this comparison, we report bounding-box mAP\@0.5 and mAP\@0.5-0.95. The full-image model is treated as the baseline, and the ROI and quadrant results are compared against it to measure whether removing background or zooming into smaller mouth regions improves detection.
+For RQ4, we evaluate whether region-focused preprocessing changes YOLOv8 disease-detection performance. The full-image, ROI, and quadrant models are evaluated on their matching Stage 3 test sets: full-image test images for the full model, ROI-cropped test images for the ROI model, and quadrant-cropped test images for the quadrant model. The same fixed preprocessing rule is applied to train, validation, and test splits, so the test set is not used to choose the crop. To see the improvement, we created bounding-box mAP\@0.5 and mAP\@0.5-0.95. By using the original image model as the baseline and comparing the ROI and quadrant results against it, we can determine whether removing the background or zooming into smaller mouth regions improves detection.
 
 # Results
 
@@ -347,6 +347,8 @@ Base on the robustness results, we see a different pattern. The clean-trained YO
 We did not repeat training runs, so the strength of the RQ1 conclusion rests on the consistency of direction across the six matched comparisons rather than on a formal statistical test. All runs also share a single backbone and a single family of hyperparameters, so a curriculum that does not help under these settings could still help under different ones.
 
 The degraded images are simulated from clean X-rays rather than collected as real low-quality clinical scans. This means the robustness results show how the model behaves under controlled blur, noise, and motion settings, but they may not capture every problem that appears in real world low-quality clinical scans.
+
+ADD about data info
 
 # Conclusion
 
