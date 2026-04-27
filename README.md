@@ -122,5 +122,6 @@ To reproduce the experiments:
 4. Run the experiment notebooks in the `methods/` and `models/` folder.
 5. Render the final report from `paper.qmd`.
 
+## Contributions
 
-
+Bryce Grover led the curriculum-learning experiments (RQ1 and RQ2). Tianyu Zhao led the image-robustness and region-focused-preprocessing experiments (RQ3 and RQ4).

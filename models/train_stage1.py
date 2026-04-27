@@ -8,7 +8,7 @@ from ultralytics import YOLO
 # paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 YAML = PROJECT_ROOT / "data" / "processed" / "yamls" / "stage1_quadrant.yaml"
- = PROJECT_ROOT / "models" / "checkpoints"
+CHECKPOINTS = PROJECT_ROOT / "models" / "checkpoints"
 RUNS_DIR = CHECKPOINTS / "runs"
 
 
