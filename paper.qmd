@@ -290,6 +290,21 @@ Figure @fig-original-degradation shows one example image under the clean and deg
 
 We see that blur has almost no negative effect, since mAP\@0.5 stays close to the clean result. Motion blur also causes only a small drop, which suggests that the model can still use the overall tooth structure when the image is slightly smeared. Noise is the most damaging condition, with mAP\@0.5 dropping from 0.360 to 0.078. This shows that random pixel-level changes make disease regions much harder to separate from the surrounding tooth and bone texture. Mixed degradation also hurts performance, with mAP\@0.5 dropping to 0.200, but it is not as severe as noise alone. Overall, the baseline test shows that the clean-trained YOLOv8 model is fairly stable under blur and motion blur, but much less robust to noisy X-ray images. Also, we notice that the blur condition has a slightly higher mAP\@0.5 than the clean condition. We suspect this happens because the Gaussian blur removes some small, noise-like dots in the X-ray image. Since the model is sensitive to these noise dots, the blur may make the image slightly smoother and help the model focus more on the main tooth and disease patterns. However, this increase is very small, so we do not treat it as a major improvement. This explanation would also need further testing.
 
+### Augmented Robustness Results
+
+@tbl-rq3-augmented shows the comparison between the clean-trained YOLOv8 model and the augmented YOLOv8 model. 
+
+| Condition | Baseline mAP\@0.5 | Augmented mAP\@0.5 | Gain |
+|---|---:|---:|---:|
+| Clean | 0.360 | 0.376 | 0.016 |
+| Blur | 0.362 | 0.380 | 0.018 |
+| Noise | 0.078 | 0.365 | 0.287 |
+| Motion blur | 0.339 | 0.374 | 0.035 |
+| Mixed | 0.200 | 0.373 | 0.173 |
+
+: Baseline vs. augmented YOLOv8 results across degraded test sets. {#tbl-rq3-augmented}
+
+We see that the augmented model improves performance across all five test conditions. The largest gain appears under noise, where mAP\@0.5 increases from 0.078 to 0.365. This is important because noise was also the condition that hurt the baseline model the most. Mixed degradation also improves clearly, from 0.200 to 0.373. Motion blur improves from 0.339 to 0.374, while clean and blur images only show small gains. Overall, augmented training makes the model more stable when the input X-ray quality becomes worse.
 
 ## [Placeholder for RQ4]
 
@@ -311,7 +326,11 @@ The degraded images are simulated from clean X-rays rather than collected as rea
 
 A three-stage easy-to-hard curriculum trained on the full DENTEX 2023 release did not outperform a matched single-stage baseline. The curriculum inherits a head start at the first training epoch from the Stage 2 model, but that head start is gone by the best-validation epoch and the curriculum settles at a lower ceiling. Most of the curriculum's training material lives at Stage 2, whose tooth-position target is largely uninformative about the eventual disease classes, so the additional supervision is plentiful but off-target. The class-level results imply that at this dataset scale, class imbalance and the difficulty of particular diseases are tighter constraints than the total number of labeled boxes.
 
-The robustness (RQ3) and region-focused-preprocessing (RQ4) tracks of this project are reported separately by the co-author.
+Based on the robustness experiment, we showed image quality also matters for disease detection. We see the clean-trained YOLOv8 model stayed fairly stable under blur and motion blur, but it dropped sharply under Gaussian noise. Also, after adding degraded images during training, the augmented model improved across all test conditions, especially under noise and mixed degradation. In practice, this means that model performance may depend heavily on the quality of the incoming X-ray. If images are noisy, the detector may miss or misclassify disease regions more often. This makes robustness testing important before using a model in real clinical workflows. These results suggest that degradation-based augmentation is a useful next step when the goal is to make the detector more stable on lower-quality X-rays.
+
+
+
+Region-focused-preprocessing (RQ4) tracks of this project are reported separately by the co-author.
 
 # References {.unnumbered}
 
