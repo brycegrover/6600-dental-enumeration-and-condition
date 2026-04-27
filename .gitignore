@@ -19,8 +19,12 @@ raw_DENTEX_data/
 
 # Model weights
 *.pt
+*.pth
 
 # Model artifacts
-*.pt
 models/checkpoints/
 models/runs/
+methods/runs/
+
+# YOLO training outputs
+*.cache
