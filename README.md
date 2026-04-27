@@ -1,68 +1,126 @@
-# Dental Project
+# Dental Disease Detection on Panoramic X-rays
 
-Hierarchical dental diagnosis on panoramic X-rays using YOLOv8 and the DENTEX dataset (MICCAI 2023).
-
-## Goal
-
-Train a YOLOv8 model in three curriculum stages (quadrant → tooth → diagnosis) and produce a per-patient treatment priority report.
+This project studies automated dental disease detection using YOLOv8 and the DENTEX 
+2023 panoramic X-ray dataset. The main goal is to evaluate how curriculum learning, 
+image quality degradation, and region-focused preprocessing affect disease-detection 
+performance.
 
 ## Dataset
 
-DENTEX — panoramic X-rays from three clinics, FDI-numbered.
+We use the DENTEX dataset from Hugging Face:
 
-- Tier 1 (quadrant only): 693 images
-- Tier 2 (quadrant + enumeration): 634 images
-- Tier 3 (full labels + masks): 705 images
-- Unlabeled: 1,571 images (not used)
+https://huggingface.co/datasets/ibrahimhamamci/DENTEX/tree/main/DENTEX
 
-Diagnosis classes: Caries, Deep Caries, Periapical Lesion, Impacted Tooth.
+DENTEX contains panoramic dental X-rays with hierarchical annotations for quadrant 
+localization, tooth enumeration, and disease diagnosis. In this project, we use the processed Stage 1, Stage 2, and Stage 3 annotation files created from the original DENTEX data.
 
-Test split: 250 images.
+Dataset tiers:
+
+- Stage 1 / Tier 1: quadrant annotations
+- Stage 2 / Tier 2: quadrant + tooth-enumeration annotations
+- Stage 3 / Tier 3: disease diagnosis annotations with masks
+
+Disease classes used in the final Stage 3 task:
+
+- Impacted Tooth
+- Caries
+- Periapical Lesion
+- Deep Caries
+
+The raw dataset and processed image folders are not included in this GitHub repository 
+because they are large medical image files. To reproduce the experiments, download the 
+DENTEX dataset from the Hugging Face link above and run the preprocessing scripts/notebooks.
 
 ## Research Questions
 
-RQ1 — Does curriculum training improve performance?
+**RQ1:** Does curriculum training improve final disease-detection performance?
 
-RQ2 — Which curriculum stage contributes most to final model performance?
+**RQ2:** Which curriculum stage contributes most to final model performance?
 
-RQ3 — To what extent do realistic image degradations such as blur, noise, and motion reduce classification performance, and can augmentation with these degradations improve model robustness?
+**RQ3:** How much do realistic image degradations such as blur, noise, and motion 
+blur reduce YOLOv8 disease-detection performance, and can degradation-augmented training 
+improve robustness?
 
-RQ4 — To what extent does region-focused preprocessing at different anatomical scales improve classification performance and robustness compared with using the full panoramic image?
+**RQ4:** Does region-focused preprocessing, such as dental ROI cropping and quadrant 
+cropping, improve YOLOv8 disease detection compared with using the full panoramic image?
 
 ## Methods
 
-Model: `yolov8m-seg` (Ultralytics), trained on MPS or CUDA.
+We use YOLOv8 for the main detection and segmentation experiments. The project 
+includes three experiment groups.
 
-Curriculum:
+### Curriculum Learning
 
-- Stage 1: quadrant detection on Tier 1 + Tier 3 (1,398 images)
-- Stage 2: tooth enumeration on Tier 2 + Tier 3 (1,339 images)
-- Stage 3: diagnosis detection + segmentation on Tier 3 (705 images)
+The curriculum model is trained in three stages:
 
-Each stage initializes from the previous stage's checkpoint.
+1. Quadrant localization
+2. Tooth enumeration
+3. Disease detection
 
-Evaluation: mAP@0.5 and mAP@0.5:0.95 on the 250-image test set, per class. Baseline is a single-stage YOLOv8 trained only on Tier 3.
+This is compared against a single-stage YOLOv8 baseline trained directly on the 
+Stage 3 disease-detection data.
 
-Priority scoring per tooth uses diagnosis class weight, detection confidence, and co-occurring findings. Teeth are ranked per patient.
+### Image Robustness
 
-## Structure
+To test robustness, we create degraded versions of the Stage 3 images:
 
-```
-Dental_Project/
-├── data/raw/dentex/DENTEX/
-├── notebooks/
-├── src/
-│   ├── data/
-│   ├── training/
-│   ├── evaluation/
-│   └── output/
-├── models/checkpoints/
-├── results/figures/
-└── README.md
-```
+- Blur
+- Gaussian noise
+- Motion blur
+- Mixed degradation
 
-## References
+We evaluate a clean-trained YOLOv8 model on these degraded test sets. We also 
+train a degradation-augmented YOLOv8 model to test whether adding degraded images 
+during training improves robustness.
 
-1. Hamamci et al. (2023). *DENTEX: An Abnormal Tooth Detection with Dental Enumeration and Diagnosis Benchmark for Panoramic X-rays.* arXiv:2305.19112.
-2. Hamamci et al. (2023). *Diffusion-based Hierarchical Multi-Label Object Detection to Analyze Panoramic Dental X-rays.* MICCAI 2023.
-3. Jocher et al. (2023). *Ultralytics YOLOv8.* https://github.com/ultralytics/ultralytics
+### Region-Focused Preprocessing
+
+To test whether focusing on dental regions helps detection, we compare three input formats:
+
+- Full panoramic image
+- Dental ROI crop
+- Quadrant crops
+
+The ROI and quadrant datasets are created by cropping the original Stage 3 images 
+and transforming the YOLO labels into the new crop coordinates.
+
+## Evaluation
+
+Models are evaluated using:
+
+- mAP@0.5
+- mAP@0.5-0.95
+
+The validation set is used to select the best checkpoint inside each training 
+run. The test set is used for final reporting.
+
+## Main Findings
+
+The three-stage curriculum model did not outperform the single-stage baseline for 
+final disease detection. The extra curriculum supervision was mostly geometric and 
+did not directly solve the disease-class imbalance problem.
+
+The robustness experiment showed that the clean-trained model was stable under blur 
+and motion blur, but much more sensitive to Gaussian noise. Degradation-augmented 
+training improved performance across all degraded test conditions, especially noise and mixed degradation.
+
+The region-focused experiment showed that cropping helped disease detection. Both 
+the dental ROI model and quadrant model performed better than the full-image model. 
+However, quadrant cropping did not clearly outperform the simpler ROI crop.
+
+## Reproducibility Notes
+
+The raw DENTEX data, generated model weights, YOLO training outputs, and cache 
+files are not included in this repository. These files are excluded because they 
+are large, private, or can be regenerated by running the notebooks.
+
+To reproduce the experiments:
+
+1. Download the DENTEX dataset from the Hugging Face link above.
+2. Place the data in the expected local data folder.
+3. Run the preprocessing scripts/notebooks.
+4. Run the experiment notebooks in the `methods/` and `models/` folder.
+5. Render the final report from `paper.qmd`.
+
+
+

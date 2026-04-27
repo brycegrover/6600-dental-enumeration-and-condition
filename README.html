@@ -352,296 +352,136 @@ display: none;
 </div>
 
 
-<div id="project-overview" class="section level2">
-<h2>Project Overview</h2>
-<p>This project builds a hierarchical dental diagnosis system trained on
-the <a href="https://huggingface.co/datasets/ibrahimhamamci/DENTEX">DENTEX
-dataset</a> — a clinically annotated collection of panoramic dental
-X-rays released as part of the MICCAI 2023 challenge. Rather than
-replicating the original challenge’s approach, we extend it in two
-meaningful ways: (1) we exploit <strong>all three annotation
-tiers</strong> of the dataset through curriculum-style training, and (2)
-we go beyond raw detections to produce a <strong>patient-level treatment
-priority report</strong> — making the model clinically actionable rather
-than just academically interesting.</p>
-<p>The core model is <strong>YOLOv8</strong>, fine-tuned and trained in
-three progressive stages that mirror how a dentist reads a panoramic
-X-ray: first localize the quadrant, then identify the tooth, then
-diagnose the condition.</p>
-<hr />
-</div>
-<div id="the-dataset-dentex" class="section level2">
-<h2>The Dataset: DENTEX</h2>
-<p>The DENTEX dataset comprises panoramic dental X-rays sourced from
-three different clinical institutions, reflecting real-world variability
-in imaging equipment and protocols. Annotations follow the <strong>FDI
-(Fédération Dentaire Internationale) numbering system</strong>, the
-global standard for dental notation.</p>
-<div id="annotation-structure" class="section level3">
-<h3>Annotation Structure</h3>
-<p>The dataset is organized into three hierarchically nested annotation
-tiers:</p>
-<table>
-<colgroup>
-<col width="19%" />
-<col width="25%" />
-<col width="54%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th>Tier</th>
-<th>Images</th>
-<th>Labels Provided</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Quadrant only</td>
-<td>693</td>
-<td>Tooth quadrant (1–4)</td>
-</tr>
-<tr class="even">
-<td>Quadrant + Enumeration</td>
-<td>634</td>
-<td>Quadrant + tooth number within quadrant (1–8)</td>
-</tr>
-<tr class="odd">
-<td>Quadrant + Enumeration + Diagnosis</td>
-<td>705</td>
-<td>Full label: quadrant, tooth number, and diagnosis class</td>
-</tr>
-<tr class="even">
-<td>Unlabeled (pre-training optional)</td>
-<td>1,571</td>
-<td>None</td>
-</tr>
-</tbody>
-</table>
-<p>Each annotation in the fully-labeled tier includes a <strong>bounding
-box</strong> and a <strong>polygon segmentation mask</strong> for
-precise spatial localization of each abnormal tooth.</p>
-</div>
-<div id="diagnosis-classes" class="section level3">
-<h3>Diagnosis Classes</h3>
-<p>The four diagnosis categories are:</p>
+<div id="dental-disease-detection-on-panoramic-x-rays" class="section level1">
+<h1>Dental Disease Detection on Panoramic X-rays</h1>
+<p>This project studies automated dental disease detection using YOLOv8
+and the DENTEX 2023 panoramic X-ray dataset. The main goal is to
+evaluate how curriculum learning, image quality degradation, and
+region-focused preprocessing affect disease-detection performance.</p>
+<div id="dataset" class="section level2">
+<h2>Dataset</h2>
+<p>We use the DENTEX dataset from Hugging Face:</p>
+<p><a href="https://huggingface.co/datasets/ibrahimhamamci/DENTEX/tree/main/DENTEX" class="uri">https://huggingface.co/datasets/ibrahimhamamci/DENTEX/tree/main/DENTEX</a></p>
+<p>DENTEX contains panoramic dental X-rays with hierarchical annotations
+for quadrant localization, tooth enumeration, and disease diagnosis. In
+this project, we use the processed Stage 1, Stage 2, and Stage 3
+annotation files created from the original DENTEX data.</p>
+<p>Dataset tiers:</p>
 <ul>
-<li><strong>Caries</strong> — early-stage tooth decay</li>
-<li><strong>Deep Caries</strong> — advanced decay approaching the
-pulp</li>
-<li><strong>Periapical Lesion</strong> — infection at the root tip</li>
-<li><strong>Impacted Tooth</strong> — tooth obstructed from normal
-eruption</li>
+<li>Stage 1 / Tier 1: quadrant annotations</li>
+<li>Stage 2 / Tier 2: quadrant + tooth-enumeration annotations</li>
+<li>Stage 3 / Tier 3: disease diagnosis annotations with masks</li>
 </ul>
-</div>
-<div id="data-split-fully-labeled-tier" class="section level3">
-<h3>Data Split (Fully-Labeled Tier)</h3>
-<table>
-<thead>
-<tr class="header">
-<th>Split</th>
-<th>Images</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Training</td>
-<td>705</td>
-</tr>
-<tr class="even">
-<td>Validation</td>
-<td>50</td>
-</tr>
-<tr class="odd">
-<td>Test</td>
-<td>250</td>
-</tr>
-</tbody>
-</table>
-<hr />
-</div>
-</div>
-<div id="what-the-original-challenge-did-and-what-we-do-differently" class="section level2">
-<h2>What the Original Challenge Did (and What We Do Differently)</h2>
-<p>The DENTEX 2023 challenge asked participants to perform hierarchical
-object detection on the fully-labeled tier only. The baseline method,
-<strong>HierarchicalDet</strong>, used a diffusion-based detection
-framework trained on the 705 fully-labeled training images.</p>
-<p>We depart from this in two key ways:</p>
-<p><strong>1. We use all 2,032 labeled images through curriculum
-learning.</strong> The original challenge treated the quadrant-only and
-quadrant-enumeration tiers as supplementary. We use them as deliberate
-training stages — each tier teaches the model a finer level of dental
-understanding before the next stage begins. This nearly triples the
-labeled training signal available to the model.</p>
-<p><strong>2. We extend the output beyond detection to clinical decision
-support.</strong> The challenge evaluated models on per-tooth detection
-metrics (mAP). We build an additional post-processing layer that
-aggregates per-tooth findings into a <strong>treatment priority
-ranking</strong> — telling a clinician not just what is wrong, but which
-teeth require the most urgent attention. This is the step from “AI
-model” to “AI assistant.”</p>
-<hr />
-</div>
-<div id="project-goals" class="section level2">
-<h2>Project Goals</h2>
-<ol style="list-style-type: decimal">
-<li><p><strong>Demonstrate that curriculum training across all
-annotation tiers improves detection performance</strong> compared to
-training on the fully-labeled set alone.</p></li>
-<li><p><strong>Leverage polygon segmentation masks</strong> (rather than
-bounding boxes only) for more precise tooth localization during the
-diagnosis stage.</p></li>
-<li><p><strong>Produce interpretable, clinically-structured
-output</strong> — a ranked treatment plan per patient X-ray — that goes
-meaningfully beyond the original challenge’s scope.</p></li>
-<li><p><strong>Keep the implementation accessible and
-reproducible</strong>, using standard open-source tools (YOLOv8 via
-Ultralytics, Python, PyTorch with MPS/CUDA support).</p></li>
-</ol>
-<hr />
+<p>Disease classes used in the final Stage 3 task:</p>
+<ul>
+<li>Impacted Tooth</li>
+<li>Caries</li>
+<li>Periapical Lesion</li>
+<li>Deep Caries</li>
+</ul>
+<p>The raw dataset and processed image folders are not included in this
+GitHub repository because they are large medical image files. To
+reproduce the experiments, download the DENTEX dataset from the Hugging
+Face link above and run the preprocessing scripts/notebooks.</p>
 </div>
 <div id="research-questions" class="section level2">
 <h2>Research Questions</h2>
-<div id="rq1-does-curriculum-training-improve-performance" class="section level3">
-<h3>RQ1 — Does curriculum training improve performance?</h3>
-<p><em>Does training progressively across the three annotation tiers
-(quadrant → enumeration → diagnosis) yield better detection accuracy on
-the fully-labeled test set compared to training on the 705 fully-labeled
-images alone?</em></p>
+<p><strong>RQ1:</strong> Does curriculum training improve final
+disease-detection performance?</p>
+<p><strong>RQ2:</strong> Which curriculum stage contributes most to
+final model performance?</p>
+<p><strong>RQ3:</strong> How much do realistic image degradations such
+as blur, noise, and motion blur reduce YOLOv8 disease-detection
+performance, and can degradation-augmented training improve
+robustness?</p>
+<p><strong>RQ4:</strong> Does region-focused preprocessing, such as
+dental ROI cropping and quadrant cropping, improve YOLOv8 disease
+detection compared with using the full panoramic image?</p>
 </div>
-<div id="rq2-what-does-each-training-stage-contribute" class="section level3">
-<h3>RQ2 — What does each training stage contribute?</h3>
-<p><em>Which curriculum stage contributes most to final model
-performance? Does the quadrant-only data (693 images) provide meaningful
-signal, or is the gain primarily driven by the enumeration-tier data
-(634 images)?</em></p>
-</div>
-<div id="rq3-how-well-does-the-model-generalize-across-dental-conditions" class="section level3">
-<h3>RQ3 — How well does the model generalize across dental
-conditions?</h3>
-<p><em>Is detection performance consistent across all four diagnosis
-classes (Caries, Deep Caries, Periapical Lesion, Impacted), or does the
-model struggle disproportionately with rarer or visually subtle
-conditions?</em></p>
-</div>
-<div id="rq4-can-per-tooth-findings-be-aggregated-into-a-coherent-treatment-priority" class="section level3">
-<h3>RQ4 — Can per-tooth findings be aggregated into a coherent treatment
-priority?</h3>
-<p><em>Can a scoring heuristic based on diagnosis severity, detection
-confidence, and co-occurrence of multiple conditions produce a
-clinically sensible ranking of treatment urgency at the patient
-level?</em></p>
-<hr />
-</div>
-</div>
-<div id="project-structure" class="section level2">
-<h2>Project Structure</h2>
-<pre><code>Dental_Project/
-├── data/
-│   └── raw/dentex/DENTEX/
-│       ├── training/training_data/
-│       │   ├── quadrant/                  # Tier 1: 693 X-rays
-│       │   ├── quadrant_enumeration/      # Tier 2: 634 X-rays
-│       │   ├── quadrant-enumeration-disease/  # Tier 3: 705 X-rays (fully labeled)
-│       │   └── unlabelled/                # 1,571 X-rays (not used)
-│       ├── validation/
-│       └── test/
-├── notebooks/                             # EDA, training experiments, evaluation
-├── src/                                   # Pipeline source code
-│   ├── data/                              # Dataset loaders and converters
-│   ├── training/                          # Curriculum training logic
-│   ├── evaluation/                        # Metrics and scoring
-│   └── output/                            # Treatment priority report generation
-├── models/
-│   └── checkpoints/                       # Saved YOLOv8 weights per stage
-├── results/
-│   └── figures/                           # Plots, sample predictions, priority reports
-└── README.qmd                             # This file</code></pre>
-<hr />
-</div>
-<div id="methods-overview" class="section level2">
-<h2>Methods (Overview)</h2>
-<div id="model-yolov8-ultralytics" class="section level3">
-<h3>Model: YOLOv8 (Ultralytics)</h3>
-<p>YOLOv8 is chosen for its strong performance on instance segmentation
-tasks, native support for polygon-mask annotations, and efficient
-training on Apple Silicon (MPS backend) and CUDA GPUs. We use the
-<code>yolov8m-seg</code> variant as a balance between capacity and
-training speed.</p>
-</div>
-<div id="curriculum-training-pipeline" class="section level3">
-<h3>Curriculum Training Pipeline</h3>
-<table>
-<colgroup>
-<col width="17%" />
-<col width="35%" />
-<col width="15%" />
-<col width="32%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th>Stage</th>
-<th>Training Data</th>
-<th>Task</th>
-<th>Labels Used</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Stage 1</td>
-<td>693 + 705 = 1,398 images</td>
-<td>Quadrant detection</td>
-<td><code>category_id_1</code></td>
-</tr>
-<tr class="even">
-<td>Stage 2</td>
-<td>634 + 705 = 1,339 images</td>
-<td>Tooth enumeration</td>
-<td><code>category_id_1</code>, <code>category_id_2</code></td>
-</tr>
-<tr class="odd">
-<td>Stage 3</td>
-<td>705 images</td>
-<td>Diagnosis detection</td>
-<td>All labels + segmentation masks</td>
-</tr>
-</tbody>
-</table>
-<p>Each stage initializes weights from the previous stage
-checkpoint.</p>
-</div>
-<div id="evaluation" class="section level3">
-<h3>Evaluation</h3>
-<p>We report <strong><a href="mailto:mAP@0.5" class="email">mAP@0.5</a></strong> and <strong><a href="mailto:mAP@0.5" class="email">mAP@0.5</a>:0.95</strong> on the held-out test set (250
-images) for the diagnosis detection task, broken down by class. We
-compare against a single-stage YOLOv8 baseline trained only on the 705
-fully-labeled images.</p>
-</div>
-<div id="treatment-priority-scoring" class="section level3">
-<h3>Treatment Priority Scoring</h3>
-<p>Each detected tooth receives a severity score based on:</p>
-<ul>
-<li>Diagnosis class (Deep Caries and Periapical Lesion weighted higher
-than Caries and Impacted)</li>
-<li>Detection confidence</li>
-<li>Presence of multiple co-occurring findings on the same tooth</li>
-</ul>
-<p>Teeth are ranked per patient and the top findings are surfaced in a
-structured summary.</p>
-<hr />
-</div>
-</div>
-<div id="references" class="section level2">
-<h2>References</h2>
+<div id="methods" class="section level2">
+<h2>Methods</h2>
+<p>We use YOLOv8 for the main detection and segmentation experiments.
+The project includes three experiment groups.</p>
+<div id="curriculum-learning" class="section level3">
+<h3>Curriculum Learning</h3>
+<p>The curriculum model is trained in three stages:</p>
 <ol style="list-style-type: decimal">
-<li><p>Hamamci et al. (2023). <em>DENTEX: An Abnormal Tooth Detection
-with Dental Enumeration and Diagnosis Benchmark for Panoramic
-X-rays.</em> arXiv:2305.19112.</p></li>
-<li><p>Hamamci et al. (2023). <em>Diffusion-based Hierarchical
-Multi-Label Object Detection to Analyze Panoramic Dental X-rays.</em>
-MICCAI 2023.</p></li>
-<li><p>Jocher et al. (2023). <em>Ultralytics YOLOv8.</em> <a href="https://github.com/ultralytics/ultralytics">https://github.com/ultralytics/ultralytics</a></p></li>
+<li>Quadrant localization</li>
+<li>Tooth enumeration</li>
+<li>Disease detection</li>
 </ol>
+<p>This is compared against a single-stage YOLOv8 baseline trained
+directly on the Stage 3 disease-detection data.</p>
+</div>
+<div id="image-robustness" class="section level3">
+<h3>Image Robustness</h3>
+<p>To test robustness, we create degraded versions of the Stage 3
+images:</p>
+<ul>
+<li>Blur</li>
+<li>Gaussian noise</li>
+<li>Motion blur</li>
+<li>Mixed degradation</li>
+</ul>
+<p>We evaluate a clean-trained YOLOv8 model on these degraded test sets.
+We also train a degradation-augmented YOLOv8 model to test whether
+adding degraded images during training improves robustness.</p>
+</div>
+<div id="region-focused-preprocessing" class="section level3">
+<h3>Region-Focused Preprocessing</h3>
+<p>To test whether focusing on dental regions helps detection, we
+compare three input formats:</p>
+<ul>
+<li>Full panoramic image</li>
+<li>Dental ROI crop</li>
+<li>Quadrant crops</li>
+</ul>
+<p>The ROI and quadrant datasets are created by cropping the original
+Stage 3 images and transforming the YOLO labels into the new crop
+coordinates.</p>
+</div>
+</div>
+<div id="evaluation" class="section level2">
+<h2>Evaluation</h2>
+<p>Models are evaluated using:</p>
+<ul>
+<li><a href="mailto:mAP@0.5" class="email">mAP@0.5</a></li>
+<li><a href="mailto:mAP@0.5-0.95" class="email">mAP@0.5-0.95</a></li>
+</ul>
+<p>The validation set is used to select the best checkpoint inside each
+training run. The test set is used for final reporting.</p>
+</div>
+<div id="main-findings" class="section level2">
+<h2>Main Findings</h2>
+<p>The three-stage curriculum model did not outperform the single-stage
+baseline for final disease detection. The extra curriculum supervision
+was mostly geometric and did not directly solve the disease-class
+imbalance problem.</p>
+<p>The robustness experiment showed that the clean-trained model was
+stable under blur and motion blur, but much more sensitive to Gaussian
+noise. Degradation-augmented training improved performance across all
+degraded test conditions, especially noise and mixed degradation.</p>
+<p>The region-focused experiment showed that cropping helped disease
+detection. Both the dental ROI model and quadrant model performed better
+than the full-image model. However, quadrant cropping did not clearly
+outperform the simpler ROI crop.</p>
+</div>
+<div id="reproducibility-notes" class="section level2">
+<h2>Reproducibility Notes</h2>
+<p>The raw DENTEX data, generated model weights, YOLO training outputs,
+and cache files are not included in this repository. These files are
+excluded because they are large, private, or can be regenerated by
+running the notebooks.</p>
+<p>To reproduce the experiments:</p>
+<ol style="list-style-type: decimal">
+<li>Download the DENTEX dataset from the Hugging Face link above.</li>
+<li>Place the data in the expected local data folder.</li>
+<li>Run the preprocessing scripts/notebooks.</li>
+<li>Run the experiment notebooks in the <code>methods/</code> and
+<code>models/</code> folder.</li>
+<li>Render the final report from <code>paper.qmd</code>.</li>
+</ol>
+</div>
 </div>
 
 
