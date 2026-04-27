@@ -144,7 +144,7 @@ The baseline for RQ1 is a single-stage run matched as closely as possible to Sta
 
 ## Image Degradation and Robustness Evaluation (RQ3)
 
-To address whether realistic image degradations affect YOLOv8 disease detection performance, we simulated the model under lower-quality X-ray conditions, including blur, noise, motion blur, and mixed degradation. Moreover, to examine whether training with degraded images improves robustness, we trained a second YOLOv8 model using degradation-augmented training data. 
+To address whether realistic image degradations affect YOLOv8 disease detection performance, we simulated the model under lower-quality X-ray conditions. This process was simulated by applying OpenCV with randomly generated parameter values to ensure each X-ray was altered fairly. The blur degradation was created using a Gaussian blur with a randomly selected kernel size of 9, 11, or 15. Noise was added using Gaussian pixel noise, with the standard deviation randomly chosen between 25 and 40. Motion blur used a motion kernel with a randomly selected size of 13, 15, or 17. The blur direction was also random, including horizontal, vertical, diagonal-down, and diagonal-up directions. Moreover, to examine whether training with degraded images improves robustness, we trained a second YOLOv8 model using degradation-augmented training data. 
 
 ### Baseline Robustness Test
 
@@ -159,6 +159,8 @@ For the augmented robustness test, we trained a second YOLOv8 model, where the m
 All curriculum and baseline models are evaluated on the held-out DENTEX validation set (50 panoramic X-rays) during training and on the DENTEX test set (250 panoramic X-rays, 1,469 evaluable annotations after filtering) for final reporting. The validation set is used for picking the best checkpoint inside each training run. The test set is used only once, after all hyperparameters and stopping criteria have been fixed, to avoid leaking test-set information into model selection.
 
 Two standard metrics are reported on both sets. Mean average precision at IoU 0.5 (mAP\@0.5) is the headline metric used in the DENTEX challenge and summarizes performance at a single, relatively forgiving overlap threshold. We also report mAP\@0.5-0.95, which averages performance across stricter overlap thresholds (from 0.5 up to 0.95) and is more sensitive to how tightly each prediction is localized. Both metrics are reported for bounding boxes and for segmentation masks. We treat mAP\@0.5 as the primary metric because it is most directly comparable to the DENTEX challenge baselines and is more stable on a small test set. For RQ2, which compares the three curriculum stages against each other, we also report each stage's validation mAP on its own target (quadrants for Stage 1, tooth positions for Stage 2, diseases for Stage 3). These per-stage values are not directly comparable to one another, since they measure different tasks, but the overall profile of how mAP develops across stages is informative about where the curriculum is doing its work.
+
+For RQ3, we use the same test-set logic but evaluate model robustness under different image-quality conditions. The clean-trained YOLOv8 model and the degradation-augmented YOLOv8 model are both evaluated on five Stage 3 disease-detection test sets: clean, blur, noise, motion blur, and mixed degradation. For each condition, we report bounding-box mAP\@0.5 and mAP\@0.5-0.95. For each degraded test set, we compare performance against the clean test set to measure the loss caused by lower image quality. We then compare the augmented model against the clean-trained model to see whether degraded training examples improve robustness.
 
 # Results
 
@@ -250,7 +252,44 @@ The AP numbers collapse each class's behavior into a single scalar, so we also l
 
 ![Six representative test-set predictions from the curriculum model, with bounding boxes and class labels overlaid. Failure modes match the per-class profile. Impacted is reliable, Caries versus Deep Caries is the dominant confusion, and periapical lesions are occasionally missed.](results/figures/sample_predictions.png){#fig-predictions width=95%}
 
-## [Placeholder for RQ3]
+## RQ3. Image Degradation and Robustness
+
+To address the question: How do realistic image degradations affect YOLOv8 disease detection performance, and does training with degraded images improve robustness?  We organized the results into three steps: how the degraded conditions were created, how the clean-trained baseline model performed, and how the degradation-augmented model changed performance.
+
+### Degradation
+
+To support the robustness experiment, we created degraded images for both testing and augmented training. For testing, the clean Stage 3 test set was converted into four lower-quality versions: blur, noise, motion blur, and mixed degradation. For augmented training, the same degradation methods were applied to the Stage 3 training images. These degraded training images were then combined with the original clean training images.
+
+![Original Stage 3 X-ray image.](results/figures/original.png){#fig-original-degradation width=65% fig-align="center"}
+
+::: {#fig-degradation-examples layout-ncol=2 fig-cap="Examples of Stage 3 X-ray degradation conditions. The images show blur, noise, motion blur, and mixed degradation."}
+![Blur](results/figures/blur.png){width=100%}
+
+![Noise](results/figures/noise.png){width=100%}
+
+![Motion blur](results/figures/motion.png){width=100%}
+
+![Mixed](results/figures/mix.png){width=100%}
+:::
+
+Figure @fig-original-degradation shows one example image under the clean and degraded conditions. Also, the labels were kept the same for all degraded images because the degradations changed image quality, but not the disease locations or classes.
+
+### Baseline Robustness Test Results
+
+@tbl-rq3-baseline shows how the clean-trained YOLOv8 model performs when the test images are degraded. 
+
+| Condition | mAP\@0.5 | mAP\@0.5-0.95 | mAP\@0.5 drop |
+|---|---:|---:|---:|
+| Clean | 0.360 | 0.232 | 0.000 |
+| Blur | 0.362 | 0.233 | -0.002 |
+| Noise | 0.078 | 0.042 | 0.282 |
+| Motion blur | 0.339 | 0.206 | 0.021 |
+| Mixed | 0.200 | 0.101 | 0.159 |
+
+: Baseline YOLOv8 robustness results across clean and degraded Stage 3 test conditions. {#tbl-rq3-baseline}
+
+We see that blur has almost no negative effect, since mAP\@0.5 stays close to the clean result. Motion blur also causes only a small drop, which suggests that the model can still use the overall tooth structure when the image is slightly smeared. Noise is the most damaging condition, with mAP\@0.5 dropping from 0.360 to 0.078. This shows that random pixel-level changes make disease regions much harder to separate from the surrounding tooth and bone texture. Mixed degradation also hurts performance, with mAP\@0.5 dropping to 0.200, but it is not as severe as noise alone. Overall, the baseline test shows that the clean-trained YOLOv8 model is fairly stable under blur and motion blur, but much less robust to noisy X-ray images. Also, we notice that the blur condition has a slightly higher mAP\@0.5 than the clean condition. We suspect this happens because the Gaussian blur removes some small, noise-like dots in the X-ray image. Since the model is sensitive to these noise dots, the blur may make the image slightly smoother and help the model focus more on the main tooth and disease patterns. However, this increase is very small, so we do not treat it as a major improvement. This explanation would also need further testing.
+
 
 ## [Placeholder for RQ4]
 
@@ -260,7 +299,13 @@ Under matched hyperparameters, the three-stage curriculum did not improve diseas
 
 The per-stage breakdown points to why. Most of the curriculum's training material lives at Stage 2, whose target (tooth position under FDI numbering) is geometric rather than pathological. The classifier is then reinitialized at Stage 3 anyway, so the disease head is effectively learned from scratch on the same lopsided 705-image pool the baseline already faces. The per-class spread on the test set is also an order of magnitude larger than the curriculum-versus-baseline gap, which points the same direction. Class-level interventions such as balanced sampling, weighted losses, or synthetic augmentation of the rare classes are likely more productive next steps than further curriculum engineering.
 
-Limitations. We did not repeat training runs, so the strength of the RQ1 conclusion rests on the consistency of direction across the six matched comparisons rather than on a formal statistical test. All runs also share a single backbone and a single family of hyperparameters, so a curriculum that does not help under these settings could still help under different ones.
+Base on the robustness results, we see a different pattern. The clean-trained YOLOv8 model is fairly stable under blur and motion blur, but it is much more sensitive to Gaussian noise. This suggests that the model relies heavily on local pixel texture when detecting disease regions. When random noise is added, small disease patterns become harder to separate from normal tooth and bone texture. The degradation-augmented model improves this problem, especially under noise and mixed degradation. This supports the idea that simple image-quality augmentation may be more useful than curriculum learning for improving robustness under low-quality intake images.
+
+# Limitations
+
+We did not repeat training runs, so the strength of the RQ1 conclusion rests on the consistency of direction across the six matched comparisons rather than on a formal statistical test. All runs also share a single backbone and a single family of hyperparameters, so a curriculum that does not help under these settings could still help under different ones.
+
+The degraded images are simulated from clean X-rays rather than collected as real low-quality clinical scans. This means the robustness results show how the model behaves under controlled blur, noise, and motion settings, but they may not capture every problem that appears in real world low-quality clinical scans.
 
 # Conclusion
 
